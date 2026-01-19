@@ -1,8 +1,7 @@
 ---
-title: "Replication: Violence Trends in the Ancient Middle East"
-author: "Replication Assistant"
-date: "`r Sys.Date()`"
-output: 
+title: "Replication: Table 2 Model 1 (as in Stata intreg)"
+date: "`r format(Sys.Date())`"
+output:
   html_document:
     toc: true
     toc_float: true
@@ -10,143 +9,166 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
-
-```
-
-## 1. Introduction & Setup
-
-This document replicates the analysis from Baten, Benati & Sołtysiak (2023), *Violence trends in the ancient Middle East between 12,000 and 400 BCE*.
-
-We adhere to strict computational reproducibility by translating the original Stata code (`0redo_viol230707nhb.do`) 1:1 into R.
-
-### Load Libraries
-
-We use standard `library()` calls to be compatible with `renv` or standard R environments.
-
-```{r libraries}
-library(tidyverse)  # Data manipulation and plotting
-library(censReg)    # Tobit regression (Maximum Likelihood estimation, matches Stata)
-library(sandwich)   # Robust Standard Errors
-library(lmtest)     # Coefficient testing
-
-```
-
-## 2. Data Loading and Preparation
-
-We load the dataset `S1_file_combined.xlsx - Sheet1.csv`. Note that this file contains aggregated site-level data () with pre-generated dummy variables for periods and regions.
-
-```{r data_prep}
-# 1. Load Data
-# Ensure the filename matches exactly what is in your directory
-df <- readxl::read_xlsx("S1_file_combined.xlsx")
-
-head(df)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
 ```{r}
+# Core
 
-df$period <- factor(df$LF, ordered = FALSE)
+library(readxl)
+library(dplyr)
+library(survival)   # survreg supports interval-censored Gaussian regression (Stata intreg analogue)
+library(knitr)
 
-report::report_table(df)
+# For clustered (co2LF) robust SEs
 
-vars <- c('rcc', 'royal', 'urban', 'period', 'battle', 'iron', 'horse', 'size', 'trauma', 'tr_nop')
+# install.packages("clubSandwich")  # if needed
 
+library(clubSandwich)
+
+```
+
+```{r}
+df <- read_excel("S1_file_combined.xlsx")
+
+# Verify required columns exist (these match the Stata do-file for Model 1)
+
+needed <- c("tr_nop","ncases","co2LF","T0n_","T2be","T3bm","T4bl","T5i_")
+stopifnot(all(needed %in% names(df)))
+
+# Basic sanity checks
+
+nrow(df)
+summary(df$tr_nop)
+table(df$tr_nop == 0, useNA = "ifany")
+dplyr::n_distinct(df$co2LF)
+
+```
+
+```{r}
+hist(df$tr_nop)
+report::report_table(df$tr_nop)
+hist(log(df$tr_nop), breaks = 20)
 ```
 
 
 ```{r}
 
-df_model <- df %>%
-  clean_names() %>% # Standardizes names (e.g., T0n_ -> t0n, T1c_ -> t1c)
-  
-  # --- Reconstruct Period Factor ---
-  # The CSV provides dummies: t0n (Neolithic), t1c (Chalcolithic), etc.
-  # We convert these back into a single factor variable for the regression.
-  mutate(
-    period_raw = case_when(
-      t0n == 1 ~ "Neolithic",
-      t1c == 1 ~ "Chalcolithic",
-      t2be == 1 ~ "Early Bronze",
-      t3bm == 1 ~ "Middle Bronze",
-      t4bl == 1 ~ "Late Bronze",
-      t5i == 1  ~ "Iron Age",
-      TRUE ~ NA_character_
-    ),
-    # Set Factor Levels explicitly so "Chalcolithic" is the reference (intercept)
-    period_factor = factor(period_raw, levels = c(
-      "Chalcolithic",      # REFERENCE CATEGORY
-      "Neolithic", 
-      "Early Bronze", 
-      "Middle Bronze", 
-      "Late Bronze", 
-      "Iron Age"
-    ))
-  ) %>%
-  
-  # --- Reconstruct Region Factor ---
-  # The 'co2' column in the CSV contains region codes:
-  # l_ = Levant, ms = Mesopotamia, tr = Turkey, ir = Iran
-  mutate(
-    region = case_when(
-      co2 == "l_" ~ "Levant",
-      co2 == "ms" ~ "Mesopotamia",
-      co2 == "tr" ~ "Turkey",
-      co2 == "ir" ~ "Iran",
-      TRUE ~ "Unknown"
-    ),
-    region = factor(region)
-  ) %>%
-  
-  # --- Create Dependent & Control Variables ---
-  mutate(
-    # Dependent Variable: log(violence_share + 0.05)
-    # The paper explicitly adds 0.05 to handle zeros before logging.
-    # 'trauma' in the CSV represents the raw violence share.
-    lviol = log(trauma + 0.05),
-    
-    # Control Variables (Ensure numeric 0/1)
-    urban_dummy = as.numeric(urban),
-    battle_dummy = as.numeric(battle),
-    royal_dummy = as.numeric(royal),
-    
-    # Tech variables (Iron, Horse)
-    iron_dummy = as.numeric(iron),
-    horse_dummy = as.numeric(horse),
-    
-    # Climate Shock (Variable 'rcc' = Rapid Climate Change/Drought share)
-    climate_shock = rcc,
-    
-    # Population Size (Variable 'size' in CSV)
-    population = size
-  )
+upper_bound = -3
 
-head(df_model)
+df_m1 <- df %>%
+mutate(
+tr_nop = as.numeric(tr_nop),
+ncases = as.numeric(ncases),
+
+# logs
+ltr_nop  = log(tr_nop),
+ltr_nop2 = ltr_nop,
+
+# left-censor zeros at -3 (approx ln(0.05))
+ltr_nop  = ifelse(tr_nop == 0, NA_real_, ltr_nop),
+ltr_nop2 = ifelse(tr_nop ==  0, upper_bound,       ltr_nop2)
+
+
+)
+
+stopifnot(isTRUE(all.equal(
+df_m1$ltr_nop[df_m1$tr_nop > 0],
+df_m1$ltr_nop2[df_m1$tr_nop > 0],
+check.attributes = FALSE
+)))
+```
+
+```{r}
+report::report_table(df_m1$tr_nop)
+```
+
+
+```{r}
+m1 <- survreg(
+Surv(ltr_nop, ltr_nop2, type = "interval2") ~ `T0n_` + T2be + T3bm + T4bl + `T5i_`,
+data    = df_m1,
+dist    = "gaussian",
+weights = ncases
+)
+
+summary(m1)
 
 ```
 
 
 ```{r}
-# Define the censoring limit used in Stata code (log of the added constant)
-cens_limit <- log(0.05)
+library(sandwich)
+library(lmtest)
 
-# --- ESTIMATE MODEL 3 ---
-# Specification: Period Dummies + Urban + Battle + Royal + Region Fixed Effects
-m1 <- lviol ~ period_factor
+# align cluster IDs to the estimation sample
+mf  <- model.frame(m1)
+idx <- as.integer(rownames(mf))
+cluster_used <- df_m1$co2LF[idx]
 
-# Run Tobit (Maximum Likelihood)
-m1_tobit <- censReg(m1, left = cens_limit, data = df_model)
+V_cl <- vcovCL(m1, cluster = cluster_used, type = "HC0")
 
-# --- CALCULATE ROBUST SEs ---
-# Replicating Stata's "vce(cluster region)"
-# We use vcovCL to get the clustered covariance matrix
-m1_vcov <- vcovCL(m1_tobit)
+# survreg has an extra scale parameter; coeftest expects betas only:
+p <- length(coef(m1))
+V_cl_beta <- V_cl[1:p, 1:p, drop = FALSE]
+
+coeftest(m1, vcov. = V_cl_beta)
+
 ```
 
-```{r}
-summary(m1_tobit)
-summary(m1_vcov)
 
-report::report_table(m1_tobit)
+
+```{r}
+
+performance::check_model(m1)
+
+```
+
+
+
+
+```{r}
+# Data pieces
+X <- model.matrix(~ T0n_ + T2be + T3bm + T4bl + T5i_, data = df)
+y <- ifelse(df$tr_nop > 0, log(df$tr_nop), NA_real_)
+cpoint <- -3
+is_cens <- df$tr_nop == 0
+
+# Stata-normalized aweights: sum(a)=N
+N <- nrow(df)
+a <- df$ncases
+a <- a * N / sum(a)
+
+loglik <- function(par) {
+  beta <- par[1:ncol(X)]
+  lns  <- par[ncol(X) + 1]
+  s <- exp(lns)
+  xb <- drop(X %*% beta)
+
+  ll <- numeric(N)
+
+  # uncensored (point): y observed exactly
+  idx_u <- which(!is_cens)
+  ru <- y[idx_u] - xb[idx_u]
+  ll[idx_u] <- -0.5 * ( a[idx_u] * (ru^2) / (s^2) + log(2*pi) + 2*lns - log(a[idx_u]) )
+
+  # left-censored at cpoint: y* <= cpoint
+  idx_c <- which(is_cens)
+  t <- (cpoint - xb[idx_c]) * sqrt(a[idx_c]) / s
+  ll[idx_c] <- pnorm(t, log.p = TRUE)
+
+  sum(ll)
+}
+
+# Fit MLE
+start <- c(rep(0, ncol(X)), 0)  # betas=0, lnsigma=0
+fit <- optim(start, fn = function(p) -loglik(p), method = "BFGS", hessian = TRUE)
+
+par_hat <- fit$par
+beta_hat <- par_hat[1:ncol(X)]
+sigma_hat <- exp(par_hat[ncol(X)+1])
+beta_hat
+sigma_hat
+
 ```
 
