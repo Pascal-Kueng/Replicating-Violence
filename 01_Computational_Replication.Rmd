@@ -1,5 +1,6 @@
 ---
 title: "Replication: Violence Trends in the Ancient Middle East"
+author: "Replication Assistant"
 date: "`r Sys.Date()`"
 output: 
   html_document:
@@ -17,64 +18,64 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 
 This document replicates the analysis from Baten, Benati & Sołtysiak (2023), *Violence trends in the ancient Middle East between 12,000 and 400 BCE*.
 
-The goal is to translate the original Stata code (`0redo_viol230707nhb.do`) into R while maintaining exact computational reproducibility for the variable transformations, model specifications (Tobit), and standard errors.
+We adhere to strict computational reproducibility by translating the original Stata code (`0redo_viol230707nhb.do`) 1:1 into R.
 
 ### Load Libraries
 
-```{r libraries}
+We use standard `library()` calls to be compatible with `renv` or standard R environments.
 
-library(tidyverse)
-library(janitor)
-library(censReg)
-library(sandwich)
-library(lmtest)
-library(knitr)
-library(kableExtra)
+```{r libraries}
+library(tidyverse)  # Data manipulation and plotting
+library(censReg)    # Tobit regression (Maximum Likelihood estimation, matches Stata)
+library(sandwich)   # Robust Standard Errors
+library(lmtest)     # Coefficient testing
 
 ```
 
 ## 2. Data Loading and Preparation
 
-We load the dataset and perform the exact data cleaning steps found in the Stata do-file.
-
-**Stata Logic Replicated:**
-
-1. 
-**Filtering:** Keep years between 12,000 BCE and 400 BCE.
-
-
-2. 
-**Transformation:** The paper calculates violence intensity as `log(violence_share + 0.05)` to handle zeros in the Tobit model.
-
-
-3. 
-**Factor Levels:** The "Chalcolithic" period is set as the reference category.
-
-
+We load the dataset `S1_file_combined.xlsx - Sheet1.csv`. Note that this file contains aggregated site-level data () with pre-generated dummy variables for periods and regions.
 
 ```{r data_prep}
-# Load the raw data
-# Ensure the CSV file name matches your local file
-d_raw <- read_csv("S1_file_combined.xlsx - Sheet1.csv")
+# 1. Load Data
+# Ensure the filename matches exactly what is in your directory
+df <- readxl::read_xlsx("S1_file_combined.xlsx")
 
-# Clean and Transform
-d_model <- d_raw %>%
-  clean_names() %>% # Converts names to snake_case (e.g., "Violence Share" -> "violence_share")
+head(df)
+```
+
+```{r}
+
+df$period <- factor(df$LF, ordered = FALSE)
+
+report::report_table(df)
+
+vars <- c('rcc', 'royal', 'urban', 'period', 'battle', 'iron', 'horse', 'size', 'trauma', 'tr_nop')
+
+```
+
+
+```{r}
+
+df_model <- df %>%
+  clean_names() %>% # Standardizes names (e.g., T0n_ -> t0n, T1c_ -> t1c)
   
-  # Filter for the relevant period (12,000 - 400 BCE)
-  filter(year_bce >= 400 & year_bce <= 12000) %>%
-  
-  # --- EXACT REPLICATION OF VARIABLES ---
-  
-  # 1. Dependent Variable: Log transformation with constant 0.05
-  # Stata: gen lviol = log(viol + 0.05)
-  mutate(lviol = log(violence_share + 0.05)) %>%
-  
-  # 2. Period Factors (Reference = Chalcolithic)
-  # We manually set levels to ensure Chalcolithic is the baseline intercept.
+  # --- Reconstruct Period Factor ---
+  # The CSV provides dummies: t0n (Neolithic), t1c (Chalcolithic), etc.
+  # We convert these back into a single factor variable for the regression.
   mutate(
-    period_factor = factor(period, levels = c(
-      "Chalcolithic",      # Reference Category
+    period_raw = case_when(
+      t0n == 1 ~ "Neolithic",
+      t1c == 1 ~ "Chalcolithic",
+      t2be == 1 ~ "Early Bronze",
+      t3bm == 1 ~ "Middle Bronze",
+      t4bl == 1 ~ "Late Bronze",
+      t5i == 1  ~ "Iron Age",
+      TRUE ~ NA_character_
+    ),
+    # Set Factor Levels explicitly so "Chalcolithic" is the reference (intercept)
+    period_factor = factor(period_raw, levels = c(
+      "Chalcolithic",      # REFERENCE CATEGORY
       "Neolithic", 
       "Early Bronze", 
       "Middle Bronze", 
@@ -83,145 +84,69 @@ d_model <- d_raw %>%
     ))
   ) %>%
   
-  # 3. Control Variable Conversions
-  # Ensure dummies are numeric (0/1) for regression input
+  # --- Reconstruct Region Factor ---
+  # The 'co2' column in the CSV contains region codes:
+  # l_ = Levant, ms = Mesopotamia, tr = Turkey, ir = Iran
   mutate(
+    region = case_when(
+      co2 == "l_" ~ "Levant",
+      co2 == "ms" ~ "Mesopotamia",
+      co2 == "tr" ~ "Turkey",
+      co2 == "ir" ~ "Iran",
+      TRUE ~ "Unknown"
+    ),
+    region = factor(region)
+  ) %>%
+  
+  # --- Create Dependent & Control Variables ---
+  mutate(
+    # Dependent Variable: log(violence_share + 0.05)
+    # The paper explicitly adds 0.05 to handle zeros before logging.
+    # 'trauma' in the CSV represents the raw violence share.
+    lviol = log(trauma + 0.05),
+    
+    # Control Variables (Ensure numeric 0/1)
     urban_dummy = as.numeric(urban),
     battle_dummy = as.numeric(battle),
     royal_dummy = as.numeric(royal),
     
-    # Handle missing values for tech variables if they exist in raw data
-    # (Stata treats missing as missing, but for regression checks we assume 0 if NA implies absence)
-    iron_dummy = ifelse(!is.na(iron), as.numeric(iron), 0),
-    horse_dummy = ifelse(!is.na(horse), as.numeric(horse), 0),
+    # Tech variables (Iron, Horse)
+    iron_dummy = as.numeric(iron),
+    horse_dummy = as.numeric(horse),
     
-    # Climate Shock: Defined as share of period with drought
-    climate_shock = if("drought_share" %in% names(.)) drought_share else NA
+    # Climate Shock (Variable 'rcc' = Rapid Climate Change/Drought share)
+    climate_shock = rcc,
+    
+    # Population Size (Variable 'size' in CSV)
+    population = size
   )
 
-# Verify the structure
-glimpse(d_model)
+head(df_model)
 
 ```
 
-## 3. Statistical Modeling (Tobit)
 
-We replicate **Table 2, Model 3** from the paper. This is the primary model discussed in the text, controlling for Region, Battle sites, Royal burials, and Urbanism.
-
-* **Method:** Tobit Regression (Censored Regression).
-* **Censoring Point:** Since the DV is `log(y + 0.05)`, the left-censoring limit is `log(0.05)`.
-* **Standard Errors:** Clustered by Region (Stata: `vce(cluster region)`).
-
-```{r analysis_tobit}
-# Define the censoring limit (log(0.05) ≈ -2.9957)
+```{r}
+# Define the censoring limit used in Stata code (log of the added constant)
 cens_limit <- log(0.05)
 
-# --- MODEL SPECIFICATION ---
-# Formula: lviol ~ Period + Urban + Battle + Royal + Region
-# Note: "Region" is added as a factor to create fixed effects.
-f_m3 <- lviol ~ period_factor + urban_dummy + battle_dummy + royal_dummy + factor(region)
+# --- ESTIMATE MODEL 3 ---
+# Specification: Period Dummies + Urban + Battle + Royal + Region Fixed Effects
+m1 <- lviol ~ period_factor
 
-# --- ESTIMATION (Maximum Likelihood) ---
-# This matches Stata's 'tobit' command
-m3_tobit <- censReg(f_m3, left = cens_limit, data = d_model)
+# Run Tobit (Maximum Likelihood)
+m1_tobit <- censReg(m1, left = cens_limit, data = df_model)
 
-# --- ROBUST STANDARD ERRORS ---
-# Replicating Stata's 'vce(cluster region)'
-# We use vcovCL from the sandwich package
-m3_vcov <- vcovCL(m3_tobit, cluster = d_model$region)
-
+# --- CALCULATE ROBUST SEs ---
+# Replicating Stata's "vce(cluster region)"
+# We use vcovCL to get the clustered covariance matrix
+m1_vcov <- vcovCL(m1_tobit)
 ```
 
-### Regression Results
+```{r}
+summary(m1_tobit)
+summary(m1_vcov)
 
-Below is the replication of the coefficients and significance levels. Note that `factor(region)` coefficients are often suppressed in paper tables but are estimated in the background.
-
-```{r results_table}
-# Generate the coefficient test table using the clustered covariance matrix
-m3_results <- coeftest(m3_tobit, vcov = m3_vcov)
-
-# Display as a tidy table
-m3_results %>%
-  tidy() %>%
-  mutate(
-    significance = case_when(
-      p.value < 0.01 ~ "***",
-      p.value < 0.05 ~ "**",
-      p.value < 0.1 ~ "*",
-      TRUE ~ ""
-    )
-  ) %>%
-  kable(caption = "Replication of Table 2, Model 3 (Tobit with Clustered SEs)") %>%
-  kable_styling(full_width = F)
-
+report::report_table(m1_tobit)
 ```
 
-**Interpretation Check:**
-If the coefficient for `period_factorNeolithic` is approx **-1.332** and `period_factorMiddle Bronze` is approx **-1.815**, the replication is successful.
-
-## 4. Visualization (Figure 2)
-
-We replicate the "Spaghetti Plot" showing violence trends by region and the overall Middle East average.
-
-```{r plot_fig2, fig.width=10, fig.height=6}
-# 1. Aggregate Data for Plotting
-plot_data <- d_model %>%
-  group_by(region, period_factor) %>%
-  summarise(
-    mean_viol = mean(violence_share, na.rm = TRUE),
-    n = n(),
-    .groups = "drop"
-  )
-
-# 2. Calculate the "Middle East" Grand Mean
-grand_mean <- d_model %>%
-  group_by(period_factor) %>%
-  summarise(
-    mean_viol = mean(violence_share, na.rm = TRUE),
-    region = "Middle East (Avg)"
-  )
-
-# 3. Combine for plotting
-# We add the grand mean to the main data for a unified legend
-plot_combined <- bind_rows(plot_data, grand_mean)
-
-# 4. Create the Plot
-ggplot(plot_combined, aes(x = period_factor, y = mean_viol, color = region, group = region)) +
-  # Lines for regions
-  geom_line(aes(linetype = region == "Middle East (Avg)", size = region == "Middle East (Avg)")) +
-  geom_point() +
-  
-  # Customizing styles to match the paper's aesthetic
-  scale_size_manual(values = c(1, 1.5), guide = "none") + # Thicker line for Average
-  scale_linetype_manual(values = c("solid", "dashed"), guide = "none") +
-  
-  # Labels
-  labs(
-    title = "Trends in Interpersonal Violence (12,000 - 400 BCE)",
-    subtitle = "Replication of Figure 2: Mean violence share by region and period",
-    y = "Violence Share (%)",
-    x = "Period",
-    color = "Region"
-  ) +
-  
-  # Theme adjustments
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "bottom"
-  )
-
-```
-
-## 5. Sensitivity Checks (Preview)
-
-While the above replicates the paper's exact method, the use of `log(y + 0.05)` on proportion data is methodologically questionable.
-
-A more robust approach (to be implemented in future steps) would be:
-
-1. **Binomial GLM:** Modeling the counts of injuries directly using `glm(cbind(injured, total-injured) ~ ..., family = binomial)`.
-2. **Zero-Inflated Models:** Checking if the zeros (0% violence) are structural.
-
-```
-
-```
