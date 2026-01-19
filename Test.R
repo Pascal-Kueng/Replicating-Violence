@@ -109,29 +109,31 @@ meat <- crossprod(Sg)
 
 V_CR0 <- bread %*% meat %*% bread
 
-# CR1 finite-sample scaling (often closer to Stata's cluster correction)
-G <- nrow(Sg)
-q <- ncol(U)
-V_CR1 <- (G/(G - 1)) * ((N - 1)/(N - q)) * V_CR0
+# --- Stata-style cluster small-sample correction for ML: multiply by G/(G-1) only ---
+G <- nrow(Sg)  # number of clusters
+V_stata <- (G/(G - 1)) * V_CR0
 
-# --- Stata-like coefficient table for betas ---
-Vb <- V_CR1[1:K, 1:K, drop = FALSE]
+# Betas only
+Vb <- V_stata[1:K, 1:K, drop = FALSE]
 se <- sqrt(diag(Vb))
 z  <- beta_hat / se
 p  <- 2 * pnorm(-abs(z))
 
-out <- data.frame(
-  Estimate   = beta_hat,
+out_stata <- data.frame(
+  Estimate     = beta_hat,
   `Std. Error` = se,
-  `z value`  = z,
-  `Pr(>|z|)` = p,
-  row.names  = colnames(X)
+  `z value`    = z,
+  `Pr(>|z|)`   = p,
+  row.names    = colnames(X)
 )
 
-out
+out_stata
 
 # Optional: report sigma too
 c(sigma = sigma_hat, lnsigma = lnsigma_hat)
+
+
+
 
 
 
