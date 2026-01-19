@@ -162,3 +162,84 @@ out_stata
 
 # Optional: report sigma too
 c(sigma = sigma_hat, lnsigma = lnsigma_hat)
+
+
+
+
+
+
+# =========================
+# Post-estimation fit checks
+# =========================
+
+# LogLik at optimum
+ll_hat <- loglik(theta)
+
+# Counts like Stata output
+n_unc <- sum(!is_cens)
+n_cen <- sum(is_cens)
+
+# Information criteria (ML-based; robust/clustering does not change these)
+k_par <- K + 1  # betas + lnsigma
+AIC <- -2 * ll_hat + 2 * k_par
+BIC <- -2 * ll_hat + log(N) * k_par
+
+# Robust Wald chi2 test of all slopes (exclude intercept)
+idx_slope <- which(colnames(X) != "(Intercept)")
+b_slope <- beta_hat[idx_slope]
+V_slope <- Vb[idx_slope, idx_slope, drop = FALSE]
+
+Wald_chi2 <- as.numeric(t(b_slope) %*% solve(V_slope) %*% b_slope)
+df_wald <- length(idx_slope)
+p_wald <- pchisq(Wald_chi2, df = df_wald, lower.tail = FALSE)
+
+# Predicted probability of being left-censored for each obs:
+# sd_i = sigma / sqrt(a_i)   =>  P(censored) = Phi((cpoint - xb) / sd_i)
+sd_i <- sigma_hat / sqrt(a)
+p_cens_hat <- pnorm((cpoint - xb) / sd_i)
+
+obs_cens_rate  <- mean(is_cens)
+pred_cens_rate <- mean(p_cens_hat)
+
+# RMSE on uncensored only (descriptive; uses aweights)
+res_u <- y[!is_cens] - xb[!is_cens]
+rmse_u <- sqrt( weighted.mean(res_u^2, w = a[!is_cens]) )
+
+# Optional: expected value of the OBSERVED outcome y_obs = max(cpoint, y*)
+# For left-censor at cpoint with sd_i:
+# E[y_obs|X] = Phi(z)*xb + sd_i*phi(z) + (1-Phi(z))*cpoint
+z <- (xb - cpoint) / sd_i
+Ey_obs <- pnorm(z) * xb + sd_i * dnorm(z) + (1 - pnorm(z)) * cpoint
+
+fit_stats <- data.frame(
+  N = N,
+  uncensored = n_unc,
+  left_censored = n_cen,
+  clusters = G,
+  logLik = ll_hat,
+  AIC = AIC,
+  BIC = BIC,
+  Wald_chi2 = Wald_chi2,
+  df = df_wald,
+  p_value = p_wald,
+  obs_censor_rate = obs_cens_rate,
+  pred_censor_rate = pred_cens_rate,
+  rmse_uncensored = rmse_u,
+  sigma = sigma_hat
+)
+
+print(fit_stats)
+
+# Quick sanity plots (optional)
+# 1) residuals vs fitted (uncensored)
+plot(xb[!is_cens], res_u,
+     xlab = "Fitted xb (latent mean)", ylab = "Residual (y - xb)",
+     main = "Uncensored residuals vs fitted")
+abline(h = 0, lty = 2)
+
+# 2) predicted censoring probs by observed censoring
+boxplot(p_cens_hat ~ is_cens,
+        names = c("Uncensored", "Censored"),
+        ylab = "Predicted P(censored)",
+        main = "Predicted censoring probability")
+
