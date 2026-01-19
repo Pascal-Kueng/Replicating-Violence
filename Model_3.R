@@ -171,15 +171,20 @@ c(sigma = sigma_hat, lnsigma = lnsigma_hat)
 # =========================
 # Post-estimation fit checks
 # =========================
+# ============================================================
+# COMPREHENSIVE MODEL DIAGNOSTICS (for intreg-style left-censor)
+# Drop this block AFTER you have:
+#   - theta, beta_hat, sigma_hat, xb, y, is_cens, cpoint, a, N, K, G, Vb
+# ============================================================
 
-# LogLik at optimum
+# -------------------------
+# 1) Basic fit statistics
+# -------------------------
 ll_hat <- loglik(theta)
 
-# Counts like Stata output
 n_unc <- sum(!is_cens)
 n_cen <- sum(is_cens)
 
-# Information criteria (ML-based; robust/clustering does not change these)
 k_par <- K + 1  # betas + lnsigma
 AIC <- -2 * ll_hat + 2 * k_par
 BIC <- -2 * ll_hat + log(N) * k_par
@@ -193,23 +198,55 @@ Wald_chi2 <- as.numeric(t(b_slope) %*% solve(V_slope) %*% b_slope)
 df_wald <- length(idx_slope)
 p_wald <- pchisq(Wald_chi2, df = df_wald, lower.tail = FALSE)
 
-# Predicted probability of being left-censored for each obs:
-# sd_i = sigma / sqrt(a_i)   =>  P(censored) = Phi((cpoint - xb) / sd_i)
+# Per-observation SD implied by Stata aweights-as-precision in your likelihood
 sd_i <- sigma_hat / sqrt(a)
+
+# Predicted probability of being left-censored
 p_cens_hat <- pnorm((cpoint - xb) / sd_i)
 
-obs_cens_rate  <- mean(is_cens)
-pred_cens_rate <- mean(p_cens_hat)
+# Compare predicted vs observed censoring (unweighted and aweight-weighted)
+obs_cens_unw  <- mean(is_cens)
+pred_cens_unw <- mean(p_cens_hat)
+
+obs_cens_w  <- weighted.mean(is_cens, w = a)
+pred_cens_w <- weighted.mean(p_cens_hat, w = a)
 
 # RMSE on uncensored only (descriptive; uses aweights)
 res_u <- y[!is_cens] - xb[!is_cens]
-rmse_u <- sqrt( weighted.mean(res_u^2, w = a[!is_cens]) )
+rmse_u <- sqrt(weighted.mean(res_u^2, w = a[!is_cens]))
 
-# Optional: expected value of the OBSERVED outcome y_obs = max(cpoint, y*)
-# For left-censor at cpoint with sd_i:
-# E[y_obs|X] = Phi(z)*xb + sd_i*phi(z) + (1-Phi(z))*cpoint
-z <- (xb - cpoint) / sd_i
-Ey_obs <- pnorm(z) * xb + sd_i * dnorm(z) + (1 - pnorm(z)) * cpoint
+# Pseudo-R2 (McFadden) style: compare to intercept-only intreg on same sample
+# (still a likelihood-based summary; not "variance explained")
+X0 <- model.matrix(~ 1, data = dat)
+K0 <- ncol(X0)
+
+loglik0 <- function(par0) {
+  beta0 <- par0[1:K0]
+  lns0  <- par0[K0 + 1]
+  s0 <- exp(lns0)
+  xb0 <- as.vector(X0 %*% beta0)
+  
+  ll0 <- numeric(N)
+  
+  idx_u0 <- which(!is_cens)
+  r0 <- y[idx_u0] - xb0[idx_u0]
+  ll0[idx_u0] <- -0.5 * ( a[idx_u0] * (r0^2) / (s0^2) + log(2*pi) + 2*lns0 - log(a[idx_u0]) )
+  
+  idx_c0 <- which(is_cens)
+  t0 <- (cpoint - xb0[idx_c0]) * sqrt(a[idx_c0]) / s0
+  ll0[idx_c0] <- pnorm(t0, log.p = TRUE)
+  
+  sum(ll0)
+}
+
+fit0 <- optim(
+  c(0, 0), fn = function(p) -loglik0(p),
+  method = "BFGS", hessian = TRUE
+)
+if (fit0$convergence != 0) stop("Null (intercept-only) optim did not converge")
+ll0_hat <- loglik0(fit0$par)
+
+pseudoR2_mcfadden <- 1 - (ll_hat / ll0_hat)
 
 fit_stats <- data.frame(
   N = N,
@@ -222,24 +259,173 @@ fit_stats <- data.frame(
   Wald_chi2 = Wald_chi2,
   df = df_wald,
   p_value = p_wald,
-  obs_censor_rate = obs_cens_rate,
-  pred_censor_rate = pred_cens_rate,
+  obs_cens_unw = obs_cens_unw,
+  pred_cens_unw = pred_cens_unw,
+  obs_cens_w = obs_cens_w,
+  pred_cens_w = pred_cens_w,
   rmse_uncensored = rmse_u,
-  sigma = sigma_hat
+  sigma = sigma_hat,
+  ll_null = ll0_hat,
+  pseudoR2_mcfadden = pseudoR2_mcfadden
 )
 
 print(fit_stats)
 
-# Quick sanity plots (optional)
-# 1) residuals vs fitted (uncensored)
+# -------------------------
+# 2) Prediction summaries
+# -------------------------
+
+# Expected value of OBSERVED outcome y_obs = max(cpoint, y*)
+# where y* ~ N(xb, sd_i^2)
+z <- (xb - cpoint) / sd_i
+Ey_obs <- pnorm(z) * xb + sd_i * dnorm(z) + (1 - pnorm(z)) * cpoint
+
+pred_summary <- data.frame(
+  xb = xb,
+  p_cens_hat = p_cens_hat,
+  Ey_obs = Ey_obs,
+  is_cens = is_cens,
+  a = a
+)
+
+cat("\nPrediction summary (unweighted):\n")
+print(summary(pred_summary[, c("xb", "p_cens_hat", "Ey_obs")]))
+
+cat("\nPrediction summary (aweight-weighted means):\n")
+print(c(
+  xb = weighted.mean(xb, w = a),
+  p_cens_hat = weighted.mean(p_cens_hat, w = a),
+  Ey_obs = weighted.mean(Ey_obs, w = a)
+))
+
+# -------------------------
+# 3) Plots: residuals & fit
+# -------------------------
+
+# 3a) Naive uncensored residuals vs fitted (descriptive only in censored models)
 plot(xb[!is_cens], res_u,
-     xlab = "Fitted xb (latent mean)", ylab = "Residual (y - xb)",
+     xlab = "Fitted xb (latent mean)",
+     ylab = "Residual (y - xb) [uncensored only]",
      main = "Uncensored residuals vs fitted")
 abline(h = 0, lty = 2)
 
-# 2) predicted censoring probs by observed censoring
+# 3b) Predicted censoring probability by observed censoring
 boxplot(p_cens_hat ~ is_cens,
         names = c("Uncensored", "Censored"),
         ylab = "Predicted P(censored)",
-        main = "Predicted censoring probability")
+        main = "Predicted censoring probability by observed status")
 
+# 3c) Observed vs predicted censoring probability (jittered)
+plot(jitter(as.numeric(is_cens), amount = 0.08), p_cens_hat,
+     xaxt = "n",
+     xlab = "Observed is_cens (0=uncens, 1=cens)",
+     ylab = "Predicted P(censored)",
+     main = "Predicted P(censored) vs observed status")
+axis(1, at = c(0, 1), labels = c("0", "1"))
+
+# 3d) Calibration of censoring probabilities (deciles)
+cuts <- quantile(p_cens_hat, probs = seq(0, 1, 0.1), na.rm = TRUE)
+cuts <- unique(cuts)
+bin <- cut(p_cens_hat, breaks = cuts, include.lowest = TRUE)
+
+cal <- data.frame(
+  bin = bin,
+  p_hat = p_cens_hat,
+  cens = is_cens,
+  w = a
+) |>
+  dplyr::group_by(bin) |>
+  dplyr::summarise(
+    n = dplyr::n(),
+    pred_unw = mean(p_hat),
+    obs_unw  = mean(cens),
+    pred_w   = weighted.mean(p_hat, w),
+    obs_w    = weighted.mean(cens, w)
+  )
+
+cat("\nCensoring calibration by decile of predicted P(censored):\n")
+print(cal)
+
+plot(cal$pred_unw, cal$obs_unw,
+     xlab = "Mean predicted P(censored) (bin)",
+     ylab = "Observed censoring rate (bin)",
+     main = "Censoring calibration (unweighted)")
+abline(0, 1, lty = 2)
+
+plot(cal$pred_w, cal$obs_w,
+     xlab = "Weighted mean predicted P(censored) (bin)",
+     ylab = "Weighted observed censoring rate (bin)",
+     main = "Censoring calibration (aweight-weighted)")
+abline(0, 1, lty = 2)
+
+# -------------------------
+# 4) Distributional diagnostics:
+#    Randomized quantile residuals for censored normal models
+# -------------------------
+# If model is correct, rq ~ approximately N(0,1)
+set.seed(1)
+
+t_c <- (cpoint - xb) / sd_i
+Phi_c <- pnorm(t_c)
+
+u <- numeric(N)
+u[!is_cens] <- pnorm((y[!is_cens] - xb[!is_cens]) / sd_i[!is_cens])
+u[is_cens]  <- runif(sum(is_cens), min = 0, max = Phi_c[is_cens])
+
+# Guard against numerical edge cases (exact 0/1)
+eps <- 1e-12
+u <- pmin(pmax(u, eps), 1 - eps)
+
+rq <- qnorm(u)
+
+qqnorm(rq, main = "Randomized quantile residuals (should be ~N(0,1))")
+qqline(rq)
+
+hist(rq, main = "Randomized quantile residuals", xlab = "rq")
+
+plot(xb, rq,
+     xlab = "Fitted xb (latent mean)",
+     ylab = "Randomized quantile residual (rq)",
+     main = "RQ residuals vs fitted")
+abline(h = 0, lty = 2)
+
+# -------------------------
+# 5) Influence / outliers (simple, descriptive)
+# -------------------------
+
+# Standardized residuals for uncensored obs (uses sd_i)
+std_res_u <- res_u / sd_i[!is_cens]
+plot(xb[!is_cens], std_res_u,
+     xlab = "Fitted xb (latent mean)",
+     ylab = "Std residual (uncensored)",
+     main = "Standardized residuals (uncensored)")
+abline(h = c(-2, 0, 2), lty = c(2, 2, 2))
+
+# Identify a few largest absolute standardized residuals among uncensored
+ord <- order(abs(std_res_u), decreasing = TRUE)
+top_k <- min(5, length(ord))
+top_outliers <- data.frame(
+  row = which(!is_cens)[ord[1:top_k]],
+  xb = xb[!is_cens][ord[1:top_k]],
+  y = y[!is_cens][ord[1:top_k]],
+  resid = res_u[ord[1:top_k]],
+  std_resid = std_res_u[ord[1:top_k]],
+  weight_a = a[!is_cens][ord[1:top_k]],
+  co2LF = cluster[which(!is_cens)[ord[1:top_k]]]
+)
+
+cat("\nTop uncensored outliers by |standardized residual|:\n")
+print(top_outliers)
+
+# -------------------------
+# 6) (Optional) Compare to a no-covariate censoring-only baseline
+# -------------------------
+# A very rough benchmark: how well does xb separate censored vs uncensored?
+# Not a classification model, but can show whether censoring is learnable from X.
+o <- order(xb)
+plot(xb[o], as.numeric(is_cens)[o],
+     xlab = "xb (sorted)",
+     ylab = "Observed is_cens (0/1)",
+     main = "Observed censoring vs xb (sorted)")
+lines(xb[o], p_cens_hat[o], lty = 1)  # overlay predicted prob (scale matches y in [0,1])
+abline(h = obs_cens_unw, lty = 2)
