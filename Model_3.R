@@ -429,3 +429,35 @@ plot(xb[o], as.numeric(is_cens)[o],
      main = "Observed censoring vs xb (sorted)")
 lines(xb[o], p_cens_hat[o], lty = 1)  # overlay predicted prob (scale matches y in [0,1])
 abline(h = obs_cens_unw, lty = 2)
+
+
+
+
+tapply(a, is_cens, summary)
+
+
+o <- order(a, decreasing = TRUE)
+head(data.frame(a=a[o], xb=xb[o], is_cens=is_cens[o], p_cens=p_cens_hat[o]), 15)
+
+
+
+
+# Which observations contribute most to "surprise" given censoring status?
+# For uncensored obs, look at predicted P(uncensored) = 1 - p_cens_hat
+p_unc_hat <- 1 - p_cens_hat
+surprise <- ifelse(is_cens, -log(p_cens_hat), -log(p_unc_hat))  # NLL contribution of censoring indicator only
+
+# weight it (since your likelihood is weight-sensitive)
+w_surprise <- a * surprise
+
+o2 <- order(w_surprise, decreasing = TRUE)
+head(data.frame(
+  row = o2,
+  a = a[o2],
+  xb = xb[o2],
+  is_cens = is_cens[o2],
+  p_cens = p_cens_hat[o2],
+  surprise = surprise[o2],
+  w_surprise = w_surprise[o2]
+), 10)
+
