@@ -1,61 +1,138 @@
-library(tidyverse)
-library(janitor)
-library(survival)
-library(sandwich)
-library(lmtest)
+# --- Packages ---
+library(readxl)
+library(dplyr)
 
-# 1. Ensure Data is Loaded and Cleaned
-df <- readxl::read_xlsx("S1_file_combined.xlsx")
-df_model <- df %>%
-  clean_names() %>%
-  mutate(
-    # Reconstruct Period (Handle inconsistent underscores from raw data)
-    period_raw = case_when(
-      t0n_ == 1 ~ "Neolithic",       # Has underscore
-      t1c_ == 1 ~ "Chalcolithic",    # Has underscore
-      t2be == 1 ~ "Early Bronze",    # No underscore
-      t3bm == 1 ~ "Middle Bronze",   # No underscore
-      t4bl == 1 ~ "Late Bronze",     # No underscore
-      t5i_ == 1 ~ "Iron Age",        # Has underscore
-      TRUE ~ NA_character_
-    ),
-    period_factor = factor(period_raw, levels = c(
-      "Chalcolithic", "Neolithic", "Early Bronze", 
-      "Middle Bronze", "Late Bronze", "Iron Age"
-    )),
-    
-    # Reconstruct Region
-    region = case_when(
-      co2 == "l_" ~ "Levant",
-      co2 == "ms" ~ "Mesopotamia",
-      co2 == "tr" ~ "Turkey",
-      co2 == "ir" ~ "Iran",
-      TRUE ~ "Unknown"
-    ),
-    
-    # Prepare Interval Data (Log-transformed)
-    # tr_nop is the variable used in Stata Model 1
-    y_lower = ifelse(tr_nop > 0, log(tr_nop), -Inf),
-    y_upper = ifelse(tr_nop > 0, log(tr_nop), -3) # -3 is approx log(0.05)
+# --- Load data ---
+df_raw <- read_excel("S1_file_combined.xlsx")
+
+# --- Build ONE analysis dataset (all objects derive from this) ---
+dat <- df_raw %>%
+  transmute(
+    tr_nop = as.numeric(tr_nop),
+    ncases = as.numeric(ncases),
+    co2LF  = as.factor(co2LF),
+    T0n_   = as.numeric(`T0n_`),
+    T2be   = as.numeric(T2be),
+    T3bm   = as.numeric(T3bm),
+    T4bl   = as.numeric(T4bl),
+    T5i_   = as.numeric(`T5i_`)
+  ) %>%
+  filter(
+    !is.na(tr_nop), !is.na(ncases), !is.na(co2LF),
+    !is.na(T0n_), !is.na(T2be), !is.na(T3bm), !is.na(T4bl), !is.na(T5i_),
+    ncases > 0
   )
 
-# 2. FORCE creation of status_var (Fixes your error)
-df_model$status_var <- 3  # Code 3 tells Surv this is "Interval" data
+stopifnot(nrow(dat) == 82)
 
-# 3. Create Survival Object
-surv_obj <- Surv(time  = df_model$y_lower, 
-                 time2 = df_model$y_upper, 
-                 event = df_model$status_var, 
-                 type  = "interval")
+# --- Model pieces ---
+X <- model.matrix(~ T0n_ + T2be + T3bm + T4bl + T5i_, data = dat)  # includes intercept
+K <- ncol(X)
+N <- nrow(dat)
 
-# 4. Run Model 1 (Replicating Stata's intreg)
-m1_intreg <- survreg(
-  surv_obj ~ period_factor,
-  data = df_model,
-  dist = "gaussian", # Gaussian interval regression = Tobit
-  weights = ncases   # Weight by number of skeletons
+y <- ifelse(dat$tr_nop > 0, log(dat$tr_nop), NA_real_)
+is_cens <- dat$tr_nop == 0
+cpoint <- -3
+
+# Stata-normalized aweights: sum(a) = N
+a <- dat$ncases
+a <- a * N / sum(a)
+
+cluster <- dat$co2LF
+stopifnot(length(cluster) == N)
+
+# --- Log-likelihood: Stata intreg with aweights (sigma/sqrt(a)) ---
+loglik <- function(par) {
+  beta <- par[1:K]
+  lns  <- par[K + 1]
+  s <- exp(lns)
+  xb <- as.vector(X %*% beta)
+  
+  ll <- numeric(N)
+  
+  # Uncensored: y observed exactly
+  idx_u <- which(!is_cens)
+  r <- y[idx_u] - xb[idx_u]
+  ll[idx_u] <- -0.5 * ( a[idx_u] * (r^2) / (s^2) + log(2*pi) + 2*lns - log(a[idx_u]) )
+  
+  # Left-censored: y* <= cpoint
+  idx_c <- which(is_cens)
+  t <- (cpoint - xb[idx_c]) * sqrt(a[idx_c]) / s
+  ll[idx_c] <- pnorm(t, log.p = TRUE)
+  
+  sum(ll)
+}
+
+# --- Fit MLE ---
+start <- c(rep(0, K), 0)  # betas=0, lnsigma=0
+fit <- optim(start, fn = function(p) -loglik(p), method = "BFGS", hessian = TRUE)
+
+if (fit$convergence != 0) stop("optim did not converge")
+
+theta <- fit$par
+beta_hat <- theta[1:K]
+lnsigma_hat <- theta[K + 1]
+sigma_hat <- exp(lnsigma_hat)
+
+# --- Per-observation scores U (N x (K+1)) for the *log-likelihood* ---
+xb <- as.vector(X %*% beta_hat)
+sigma <- sigma_hat
+
+U <- matrix(0, nrow = N, ncol = K + 1)
+colnames(U) <- c(colnames(X), "lnsigma")
+
+# Uncensored scores
+idx_u <- which(!is_cens)
+r <- y[idx_u] - xb[idx_u]
+U[idx_u, 1:K]   <- (a[idx_u] * r / sigma^2) * X[idx_u, , drop = FALSE]
+U[idx_u, K + 1] <- -1 + (a[idx_u] * r^2 / sigma^2)
+
+# Censored scores
+idx_c <- which(is_cens)
+t <- (cpoint - xb[idx_c]) * sqrt(a[idx_c]) / sigma
+
+# lambda = phi(t)/Phi(t), computed stably
+log_phi <- dnorm(t, log = TRUE)
+log_Phi <- pnorm(t, log.p = TRUE)
+lambda <- exp(pmin(log_phi - log_Phi, 700))
+
+U[idx_c, 1:K]   <- -(lambda * sqrt(a[idx_c]) / sigma) * X[idx_c, , drop = FALSE]
+U[idx_c, K + 1] <- -(lambda * t)
+
+# --- Cluster-robust sandwich variance ---
+# bread = inverse Hessian of NEGATIVE log-likelihood
+bread <- solve(fit$hessian)
+
+# meat = sum scores within clusters, crossprod
+Sg <- rowsum(U, cluster)   # G x (K+1)
+meat <- crossprod(Sg)
+
+V_CR0 <- bread %*% meat %*% bread
+
+# CR1 finite-sample scaling (often closer to Stata's cluster correction)
+G <- nrow(Sg)
+q <- ncol(U)
+V_CR1 <- (G/(G - 1)) * ((N - 1)/(N - q)) * V_CR0
+
+# --- Stata-like coefficient table for betas ---
+Vb <- V_CR1[1:K, 1:K, drop = FALSE]
+se <- sqrt(diag(Vb))
+z  <- beta_hat / se
+p  <- 2 * pnorm(-abs(z))
+
+out <- data.frame(
+  Estimate   = beta_hat,
+  `Std. Error` = se,
+  `z value`  = z,
+  `Pr(>|z|)` = p,
+  row.names  = colnames(X)
 )
 
-# 5. Clustered Standard Errors (by 'co2lf')
-# Note: if co2lf is missing/character, ensure it's a factor/ID
-coeftest(m1_intreg, vcov = vcovCL(m1_intreg, cluster = df_model$co2lf))
+out
+
+# Optional: report sigma too
+c(sigma = sigma_hat, lnsigma = lnsigma_hat)
+
+
+
+
