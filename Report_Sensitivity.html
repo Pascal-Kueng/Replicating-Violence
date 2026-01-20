@@ -95,41 +95,58 @@ window.Quarto = {
 
 <section id="discrepancies-between-the-reported-and-implemented-analysis" class="level4">
 <h4 class="anchored" data-anchor-id="discrepancies-between-the-reported-and-implemented-analysis">1. Discrepancies between the reported and implemented analysis</h4>
-<p>The paper states that the dependent variable is log-transformed after adding a small constant (0.05) to accommodate zero trauma shares. Our replication indicates this is not what was implemented. We confirmed that the authors’ Stata code does not include the “+ 0.05” transformation step; accordingly, reproducing the published results does not require (and is not consistent with) a specification.</p>
+<p>The paper states that the dependent variable is log-transformed after adding a small constant (0.05) to accommodate zero trauma shares. Our replication indicates this is not what was implemented. We confirmed that the authors’ Stata code does not include the “+ 0.05” transformation step; accordingly, reproducing the published results does not require (and is not consistent with) a <span class="math inline">\(\log(y + 0.05)\)</span> specification.</p>
 <p>Instead, the published estimates are exactly reproduced when the outcome is constructed as follows: the log is taken only for strictly positive trauma shares, and observations with a trauma share of zero are not transformed into a finite log value but are treated as left-censored at a fixed censoring point on the log scale (approximately −3). This is a substantively different procedure from adding a constant before logging. Under the implemented approach, zeros contribute to the likelihood through a censoring assumption (“latent below the threshold”) rather than through an observed transformed value. Because this censoring step is central to the model’s interpretation and to how zeros are handled, the mismatch between the paper’s description and the implemented code is consequential.</p>
 </section>
 <section id="why-the-censored-tobitintreg-approach-is-conceptually-misaligned-with-the-data" class="level4">
 <h4 class="anchored" data-anchor-id="why-the-censored-tobitintreg-approach-is-conceptually-misaligned-with-the-data">2. Why the censored Tobit/intreg approach is conceptually misaligned with the data</h4>
-<p>Even if the specification were fully documented, a censored Tobit (interval regression) is conceptually difficult to justify for this outcome. The trauma measure is a proportion derived from counts—trauma cases observed out of the number of examined skeletons in a site–period. In this setting, a zero share typically means “0 cases out of examined,” not that an underlying continuous latent variable has been censored by a detection limit. Tobit’s key assumption—that there exists an unbounded latent normal outcome that can fall below a threshold and then becomes censored—does not naturally correspond to a “count out of” data-generating process.</p>
-<p>A related concern is that the information content of a zero depends heavily on the denominator. Observing 0 cases out of a large provides much stronger evidence that the underlying rate is near zero than observing 0 cases out of a small . In a Tobit-with-censoring setup, the way zeros enter the likelihood is driven by an arbitrary censor point on a transformed latent scale (roughly equivalent to a 5% violence rate), rather than by the exact sampling probability implied by . This can blur meaningful differences between site–periods with very different sample sizes.</p>
-<p>Finally, proportional/count outcomes have a mean–variance relationship dictated by binomial sampling (and often additional overdispersion). The Tobit framework assumes (on the latent scale) a constant-variance normal disturbance; analytic weights can rescale contributions to the likelihood, but they do not make the Tobit likelihood equivalent to the count-based sampling process that generated the data, nor do they automatically recover the correct dependence of variance on both and the mean.</p>
+<p>The authors likely employed the Tobit specification as a mechanical solution to the “log of zero” problem. However, this choice inadvertently imposes structural assumptions that are conceptually misaligned with bioarchaeological data. The trauma measure is a proportion derived from counts—trauma cases observed out of the number of examined skeletons in a site–period. In this setting, a zero share typically means “0 cases out of <span class="math inline">\(N\)</span> examined,” not that an underlying continuous latent variable has been censored by a detection limit. Tobit’s key assumption—that there exists an unbounded latent normal outcome that can fall below a threshold and then becomes censored—does not naturally correspond to a “count out of <span class="math inline">\(N\)</span>” data-generating process.</p>
+<p>A related concern is that the information content of a zero depends heavily on the denominator. Observing 0 cases out of a large <span class="math inline">\(N\)</span> provides much stronger evidence that the underlying rate is near zero than observing 0 cases out of a small <span class="math inline">\(N\)</span>. In the authors’ Tobit setup, zeros are handled via a fixed censoring point (roughly equivalent to a 5% violence rate). In the Tobit setup, both 0/5 and 0/500 enter as “left-censored below the same threshold”. Weights can change influence, but the likelihood still does not reflect the binomial sampling evidence that makes 0/500 far more informative than 0/5.</p>
+<p>Finally, proportional/count outcomes have a mean–variance relationship dictated by binomial sampling (and often additional overdispersion). The Tobit framework assumes (on the latent scale) a constant-variance normal disturbance; analytic weights can rescale contributions to the likelihood, but they do not make the Tobit likelihood equivalent to the count-based sampling process that generated the data, nor do they automatically recover the correct dependence of variance on both <span class="math inline">\(N\)</span> and the mean.</p>
 </section>
 <section id="why-a-beta-binomial-model-is-conceptually-better" class="level4">
 <h4 class="anchored" data-anchor-id="why-a-beta-binomial-model-is-conceptually-better">3. Why a beta-binomial model is conceptually better</h4>
-<p>A beta-binomial model matches the structure of the data directly. It models the observed number of trauma cases out of examined individuals, with the probability of trauma linked to covariates (e.g., via a logit link). The binomial component handles the fact that the data are discrete counts bounded by ; the beta component allows to vary across site–periods beyond what a strict binomial would permit, capturing overdispersion that is plausible in aggregated bioarchaeological data.</p>
+<p>A beta-binomial model matches the structure of the data directly. It models the observed number of trauma cases <span class="math inline">\(k\)</span> out of <span class="math inline">\(n\)</span> examined individuals, with the probability of trauma <span class="math inline">\(\pi\)</span> linked to covariates (e.g., via a logit link). The binomial component handles the fact that the data are discrete counts bounded by <span class="math inline">\(n\)</span>; the beta component allows <span class="math inline">\(\pi\)</span> to vary across site–periods beyond what a strict binomial would permit, capturing overdispersion that is plausible in aggregated bioarchaeological data.</p>
 <p>This approach resolves the key conceptual issues above:</p>
 <ul>
-<li>Zeros are treated as ordinary outcomes with an exact probability , rather than as censored latent values requiring an arbitrary censor threshold.</li>
+<li>Zeros are treated as ordinary outcomes with an exact probability <span class="math inline">\(P(k=0)\)</span>, rather than as censored latent values requiring an <strong>arbitrary censor threshold</strong>.</li>
 <li>Differences in denominators are handled natively through the likelihood: 0/500 and 0/10 are not treated as equivalent signals.</li>
 <li>Predicted means remain within [0, 1] by construction.</li>
 <li>Overdispersion can be modeled explicitly, which generally yields more credible uncertainty estimates than relying on a homoskedastic latent-normal assumption.</li>
 </ul>
 </section>
-<section id="empirical-comparison" class="level3">
-<h3 class="anchored" data-anchor-id="empirical-comparison">4. Empirical Comparison</h3>
-<section id="comparing-model-fit-and-predictive-accuracy" class="level4">
-<h4 class="anchored" data-anchor-id="comparing-model-fit-and-predictive-accuracy">4.1 Comparing Model Fit and Predictive Accuracy</h4>
-<p>[cite_start]The analysis sample consists of <span class="math inline">\(N=82\)</span> site-period observations (34 zero-trauma cases)[cite: 52, 239, 240]. [cite_start]To implement the Beta-binomial model, continuous proportions were reconstructed into integer counts; the mean absolute rounding discrepancy was negligible (0.021), ensuring the count-based model validly represents the data[cite: 336].</p>
-<p>[cite_start]Although the Tobit model yielded a lower AIC/BIC, these metrics are <strong>not comparable</strong> here because the models operate on entirely different outcome scales (continuous log-density vs.&nbsp;discrete counts)[cite: 164, 359]. We instead rely on “common-scale” predictive checks, which reveal catastrophic failures in the Tobit specification:</p>
+<section id="empirical-analysis-and-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="empirical-analysis-and-comparison">4. Empirical Analysis and Comparison</h3>
+<section id="sensitivity-of-the-tobit-results-to-the-censoring-point" class="level4">
+<h4 class="anchored" data-anchor-id="sensitivity-of-the-tobit-results-to-the-censoring-point">4.1 Sensitivity of the Tobit results to the censoring point</h4>
+<p>The Tobit specification requires choosing a censoring point <span class="math inline">\(c\)</span> on the log scale (the paper’s implementation corresponds to approximately <span class="math inline">\(c \approx \log(0.05) \approx -3.0\)</span>). Because this threshold is not implied by the underlying “count out of <span class="math inline">\(N\)</span>” data-generating process, we re-estimated the full Tobit model across a grid of plausible censoring values <span class="math inline">\(c \in \{-5.0, -4.5, -4.0, -3.5, -3.0, -2.5\}\)</span>, holding the covariates, analytic weights, clustering, and estimation procedure fixed (see <strong>Figure 1</strong> and <strong>Table 2</strong>).</p>
+<p><strong>Coefficient instability and sensitivity of statistical support.</strong> The figure and coefficient grid show that several effects shift materially as <span class="math inline">\(c\)</span> changes. For example, <code>T2be</code> is not statistically significant at very low censor points (<span class="math inline">\(c = -5.0, -4.5\)</span>) but becomes significant for higher thresholds (from <span class="math inline">\(c = -4.0\)</span> onward). Conversely, <code>co2l</code> is statistically supported at lower censor points (<span class="math inline">\(c = -5.0, -4.5, -4.0\)</span>) but loses support as the threshold rises (from roughly <span class="math inline">\(c = -3.5\)</span> onward). Substantively, key context coefficients such as <code>battle</code> and <code>royal</code> also shrink as <span class="math inline">\(c\)</span> increases, indicating that effect magnitudes are not stable to this modeling choice.</p>
+<div class="cell">
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="Report_Sensitivity_files/figure-html/unnamed-chunk-1-1.png" class="img-fluid figure-img" style="width:100.0%"></p>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>Fit vs.&nbsp;calibration trade-off.</strong> Within the Tobit likelihood, fit improves mechanically as <span class="math inline">\(c\)</span> increases (logLik rises and AIC/BIC fall). However, this improvement coincides with sharply worsening calibration of zeros: while the observed weighted censoring rate is <strong>0.125</strong>, the model’s predicted weighted censoring probability rises from <strong>0.126</strong> at <span class="math inline">\(c = -5.0\)</span> to <strong>0.600</strong> at <span class="math inline">\(c = -3.0\)</span> and <strong>0.711</strong> at <span class="math inline">\(c = -2.5\)</span>. Thus, the censor points that appear “best” by AIC/BIC correspond to the most implausible predicted frequency of zeros and exacerbate the model’s misalignment with the bounded outcome.</p>
+<p><strong>Implication.</strong> The Tobit results—and in particular which period and proxy effects appear statistically supported—are sensitive to an analyst-chosen censoring threshold. This sensitivity reinforces that the Tobit/censoring formulation is not a robust basis for inference in a “count-out-of-<span class="math inline">\(N\)</span>” setting.</p>
+</section>
+<section id="comparing-model-fit-and-predictive-accuracy-to-a-beta-binomial-specification" class="level4">
+<h4 class="anchored" data-anchor-id="comparing-model-fit-and-predictive-accuracy-to-a-beta-binomial-specification">4.2 Comparing Model Fit and Predictive Accuracy to a Beta Binomial Specification</h4>
+<p>The analysis sample consists of <span class="math inline">\(N=82\)</span> site-period observations (34 zero-trauma cases). To implement the Beta-binomial model, continuous proportions were reconstructed into integer counts, ensuring the approximation is small (mean absolute discrepancy 0.021), so the reconstructed counts closely track the original shares.</p>
+<p>While the Tobit model technically reports a lower AIC (<span class="math inline">\(234.7\)</span> vs <span class="math inline">\(329.5\)</span>), these metrics are <strong>not comparable</strong> because the models operate on different outcome scales (continuous log-density vs.&nbsp;discrete counts). Instead, we rely on “common-scale” predictive checks, which reveal severe miscalibration in the Tobit specification:</p>
 <ul>
-<li><strong>Predictive Validity (The “Exploding Mean” Failure):</strong> The Tobit model generates theoretically impossible predictions when projected back to the original scale. [cite_start]The weighted predicted mean trauma share for the Tobit model was <strong>2,330.16</strong>, compared to an observed weighted mean of <strong>0.091</strong>[cite: 579]. This massive error occurs because the Tobit model applies analytic weights to the <em>log-scale</em> variance; when back-transformed to the natural scale, this inflated variance creates a heavy right tail that does not exist in the bounded <span class="math inline">\([0,1]\)</span> data. [cite_start]In contrast, the Beta-binomial model predicted a weighted mean of <strong>0.121</strong>, accurately tracking the observed data[cite: 579].</li>
-<li><strong>Zero-Inflation/Censoring:</strong> The Tobit model fundamentally misidentifies the frequency of zeros. [cite_start]It predicts a weighted zero rate of <strong>59.9%</strong>, whereas the observed weighted zero rate is only <strong>12.6%</strong>[cite: 579]. [cite_start]The Beta-binomial model successfully recovers the data structure with a predicted zero rate of <strong>16.4%</strong>[cite: 579].</li>
-<li><strong>Residual Diagnostics:</strong> The Beta-binomial model shows no evidence of misspecification. [cite_start]DHARMa simulation-based diagnostics confirm the residuals conform to expected distributions (KS test <span class="math inline">\(p=0.59\)</span>) and that dispersion is correctly modeled (<span class="math inline">\(p=0.36\)</span>), with no significant zero-inflation (<span class="math inline">\(p=0.58\)</span>)[cite: 419, 436, 479, 499].</li>
+<li><strong>Predictive Validity (The “Exploding Mean” Failure):</strong> The Tobit model generates theoretically impossible predictions when projected back to the original scale. The weighted predicted mean trauma share for the Tobit model was <strong>2,330.16</strong>, compared to an observed weighted mean of <strong>0.091</strong>. This failure is systematic across periods: for example, the Tobit model predicts weighted means of <strong>5,677</strong> for period <code>T2be</code> and <strong>7,896</strong> for <code>T3bm</code>, against observed means of <span class="math inline">\(&lt; 0.10\)</span>. This occurs because the Tobit model applies analytic weights to the <em>log-scale</em> variance; when back-transformed to the natural scale, this inflated variance creates a heavy right tail that does not exist in the bounded <span class="math inline">\([0,1]\)</span> data.</li>
+<li><strong>Zero-Inflation/Censoring:</strong> The Tobit model fundamentally misidentifies the frequency of zeros. It predicts a weighted zero rate of <strong>59.9%</strong>, whereas the observed weighted zero rate is only <strong>12.6%</strong>. The Beta-binomial model successfully recovers the data structure with a predicted zero rate of <strong>16.4%</strong>.</li>
+<li><strong>Residual Diagnostics:</strong> The Beta-binomial model shows no evidence of misspecification. DHARMa simulation-based diagnostics confirm the residuals conform to expected distributions (KS test <span class="math inline">\(p=0.59\)</span>) and that dispersion is correctly modeled (<span class="math inline">\(p=0.36\)</span>), with no significant zero-inflation (<span class="math inline">\(p=0.58\)</span>).</li>
 </ul>
 </section>
-<section id="re-evaluating-the-papers-conclusions" class="level4">
-<h4 class="anchored" data-anchor-id="re-evaluating-the-papers-conclusions">4.2 Re-evaluating the Paper’s Conclusions</h4>
-<p>[cite_start]The choice of model alters the statistical significance of the findings, though not the direction of the effects (coefficient signs agree across all variables)[cite: 755]. The Beta-binomial analysis suggests that the “fine-grained” temporal fluctuations reported in the paper are likely Type I errors (false positives) driven by the Tobit model’s inability to account for sample size (<span class="math inline">\(N\)</span>).</p>
+</section>
+<section id="re-evaluating-the-papers-conclusions" class="level3">
+<h3 class="anchored" data-anchor-id="re-evaluating-the-papers-conclusions">5 Re-evaluating the Paper’s Conclusions</h3>
+<p>The choice of model alters the statistical significance of the findings, though not the direction of the effects (coefficient signs agree across all variables). The Beta-binomial analysis suggests that the “fine-grained” temporal fluctuations reported in the paper are not robust to a count model with overdispersion. The evidence for these finer period differences is sensitive to the Tobit/censoring specification.</p>
 <p><strong>Table 1: Comparison of Statistical Significance (<span class="math inline">\(p &lt; 0.05\)</span>)</strong></p>
 <table class="caption-top table">
 <colgroup>
@@ -145,7 +162,7 @@ window.Quarto = {
 <th style="text-align: left;">Context</th>
 <th style="text-align: left;">Tobit (Original)</th>
 <th style="text-align: left;">Beta-Binomial (Corrected)</th>
-<th style="text-align: left;">Conclusion</th>
+<th style="text-align: left;">Assessment</th>
 </tr>
 </thead>
 <tbody>
@@ -171,32 +188,32 @@ window.Quarto = {
 <td style="text-align: left;"><strong>Robust</strong></td>
 </tr>
 <tr class="even">
-<td style="text-align: left;"><strong>Ton</strong></td>
+<td style="text-align: left;"><strong>T0n_</strong></td>
 <td style="text-align: left;">Period 1</td>
 <td style="text-align: left;"><strong>Sig</strong> (<span class="math inline">\(p&lt;.001\)</span>)</td>
 <td style="text-align: left;">NS (<span class="math inline">\(p=.521\)</span>)</td>
-<td style="text-align: left;"><strong>Refuted</strong></td>
+<td style="text-align: left;"><strong>Not Supported</strong></td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;"><strong>T2be</strong></td>
 <td style="text-align: left;">Period 2</td>
 <td style="text-align: left;"><strong>Sig</strong> (<span class="math inline">\(p=.001\)</span>)</td>
 <td style="text-align: left;">NS (<span class="math inline">\(p=.854\)</span>)</td>
-<td style="text-align: left;"><strong>Refuted</strong></td>
+<td style="text-align: left;"><strong>Not Supported</strong></td>
 </tr>
 <tr class="even">
 <td style="text-align: left;"><strong>T5i</strong></td>
 <td style="text-align: left;">Period 5</td>
 <td style="text-align: left;"><strong>Sig</strong> (<span class="math inline">\(p&lt;.001\)</span>)</td>
 <td style="text-align: left;">NS (<span class="math inline">\(p=.663\)</span>)</td>
-<td style="text-align: left;"><strong>Refuted</strong></td>
+<td style="text-align: left;"><strong>Not Supported</strong></td>
 </tr>
 <tr class="odd">
 <td style="text-align: left;"><strong>co2ms</strong></td>
 <td style="text-align: left;">Isotopes</td>
 <td style="text-align: left;"><strong>Sig</strong> (<span class="math inline">\(p=.005\)</span>)</td>
-<td style="text-align: left;">NS (<span class="math inline">\(p=.051\)</span>)</td>
-<td style="text-align: left;"><strong>Refuted</strong></td>
+<td style="text-align: left;">Borderline (<span class="math inline">\(p=.051\)</span>)</td>
+<td style="text-align: left;"><strong>Sensitive to model</strong></td>
 </tr>
 <tr class="even">
 <td style="text-align: left;"><strong>co2l</strong></td>
@@ -207,12 +224,11 @@ window.Quarto = {
 </tr>
 </tbody>
 </table>
-<p><em>Note: P-values derived from cluster-robust errors. [cite_start]“Refuted” indicates that significance disappears or becomes borderline when using the appropriate count model.</em> [cite: 755]</p>
-<p><strong>A. Conclusions Supported by Both Models (Robust):</strong> * [cite_start]<strong>Violence &amp; Status:</strong> Both models agree that <code>battle</code> and <code>royal</code> contexts are associated with significantly higher trauma prevalence[cite: 755]. * [cite_start]<strong>Period T3bm:</strong> Both models identify the <code>T3bm</code> period as having significantly lower trauma than the baseline[cite: 755].</p>
-<p><strong>B. Conclusions Not Supported (Likely False Positives):</strong> The Tobit model identified three other periods (<code>Ton_</code>, <code>T2be</code>, <code>T5i_</code>) as having significantly lower trauma rates. <strong>The Beta-binomial model finds no evidence for this</strong>, suggesting these effects were artifacts of treating small-sample zeros as high-certainty data points. * [cite_start]<code>Ton_</code>: <span class="math inline">\(p\)</span> increases from <span class="math inline">\(&lt;0.001\)</span> (Tobit) to <strong>0.521</strong> (Beta-binomial/NS)[cite: 755]. * [cite_start]<code>T2be</code>: <span class="math inline">\(p\)</span> increases from <span class="math inline">\(0.001\)</span> (Tobit) to <strong>0.854</strong> (Beta-binomial/NS)[cite: 755]. * [cite_start]<code>T5i_</code>: <span class="math inline">\(p\)</span> increases from <span class="math inline">\(&lt;0.001\)</span> (Tobit) to <strong>0.663</strong> (Beta-binomial/NS)[cite: 755].</p>
-<p><strong>C. New Insights:</strong> * <strong>Carbon Isotopes:</strong> The model choice flips the significance of isotope proxies. [cite_start]In the Beta-binomial model, <code>co2l</code> (low Carbon) becomes a significant negative predictor (<span class="math inline">\(p=0.030\)</span>), while the <code>co2ms</code> effect found in the Tobit model fades to non-significance (<span class="math inline">\(p=0.051\)</span>)[cite: 755].</p>
+<p><em>Note: P-values derived from cluster-robust errors (N = 21 clusters). </em></p>
+<p><strong>A. Conclusions Supported by Both Models (Robust):</strong> * <strong>Violence &amp; Status:</strong> Both models agree that <code>battle</code> and <code>royal</code> contexts are associated with significantly higher trauma prevalence. * <strong>Period T3bm:</strong> Both models identify the <code>T3bm</code> period as having significantly lower trauma than the baseline.</p>
+<p><strong>B. Conclusions Not Supported:</strong> The Tobit model identified three other periods (<code>T0n_</code>, <code>T2be</code>, <code>T5i_</code>) as having significantly lower trauma rates. <strong>The Beta-binomial model finds no evidence for this</strong>, suggesting these effects could be artifacts of treating small-sample zeros as high-certainty data points.</p>
+<p><strong>C. New Insights:</strong> * <strong>Carbon Isotopes:</strong> The model choice flips the significance of isotope proxies. In the Beta-binomial model, <code>co2l</code> (low Carbon) becomes a significant negative predictor (<span class="math inline">\(p=0.030\)</span>), while the <code>co2ms</code> effect found in the Tobit model fades to borderline non-significance (<span class="math inline">\(p=0.051\)</span>).</p>
 <p><strong>Summary:</strong> The robust evidence indicates a simpler story than originally claimed: violence spikes in specific contexts (Battles, Royal) and dips in <code>T3bm</code>, but other periods are statistically indistinguishable from the baseline once sample size is properly modeled.</p>
-</section>
 </section>
 
 </main>
