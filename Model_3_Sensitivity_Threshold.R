@@ -1,19 +1,4 @@
-Mostly yes: the wrapper I gave **re-fits the full MLE + clustered-robust VCE** for each `cpoint` and returns a **fit table**.
 
-But if by “full analytic pipeline every time” you mean **everything you’re printing now** (null model + pseudo-R², prediction summaries, calibration table, surprise ranking, outliers), then **no** — that earlier loop only returned a small subset.
-
-Here’s a “full pipeline per cpoint” version that:
-  
-  * re-runs **the entire estimation** (same loglik, same aweights, same cluster sandwich, same G/(G−1))
-* recomputes **null model** + McFadden pseudo-R² for that `cpoint`
-* computes **predicted censoring**, **weighted/unweighted censor rates**, **weighted Brier score**
-  * produces **calibration table** (deciles)
-* produces **top weighted surprises** + **top standardized residual outliers**
-  * returns a **comparison table across cpoints** plus a list of full results per cpoint
-
-Paste this *after* you’ve built `dat`, `X`, `K`, `N`, `y`, `is_cens`, `a`, and `cluster` (i.e., after your Model 3 setup), and run.
-
-```r
 # ============================================================
 # Full pipeline re-run for a grid of censoring points
 # (ONLY cpoint changes; everything else identical)
@@ -268,11 +253,110 @@ print(compare[order(compare$BIC), ])  # sort by BIC (or AIC)
 # results[[which(c_grid == -4)]]$cal
 # results[[which(c_grid == -4)]]$top_surprise
 # results[[which(c_grid == -4)]]$top_outliers
-```
 
-### TL;DR answer to your question
 
-* The **earlier** code: re-runs *estimation* for each `cpoint` and compares basic fit stats ✅
-* The code **above**: re-runs your **entire diagnostics pipeline** for each `cpoint` and gives a single comparison table ✅✅
+# ============================================================
+# AGGREGATE RESULTS (FIXED)
+# ============================================================
 
-Run it and paste the `compare` table — the key columns to watch are `pred_cens_w` vs `obs_cens_w`, `brier_w`, and `max_w_surprise` (your “row 20 problem” should shrink a lot if a lower `cpoint` helps).
+# 1. Fit Statistics Table (Sorted by cpoint)
+fit_grid <- do.call(rbind, lapply(results, function(r) r$fit_stats))
+fit_grid <- fit_grid[order(fit_grid$cpoint), ] 
+print(fit_grid)
+
+# 2. Coefficients Table (formatted with stars)
+format_est_sig <- function(model_res) {
+  # Extract Estimate (Column 1) and P-value (Column 4) by index to be safe
+  est  <- model_res$out[, 1]  
+  pval <- model_res$out[, 4]  
+  
+  # Define stars
+  stars <- ifelse(pval < 0.01, "**",
+                  ifelse(pval < 0.05, "*", ""))
+  
+  # Format string
+  sprintf("%.3f%s", est, stars)
+}
+
+# Combine results into a matrix
+est_matrix_sig <- do.call(cbind, lapply(results, format_est_sig))
+
+# Set variable names
+var_names <- rownames(results[[1]]$out)
+
+# Set column names based on cpoint
+colnames(est_matrix_sig) <- paste0("c=", sapply(results, function(r) r$cpoint))
+
+# Combine into data frame
+coef_grid_sig <- data.frame(
+  Variable = var_names, 
+  est_matrix_sig, 
+  check.names = FALSE
+)
+
+# Load library (install if needed: install.packages("knitr"))
+library(knitr)
+
+# ============================================================
+# OPTION 1: Static "Kable" Tables (Good for PDF/Word/Console)
+# ============================================================
+
+# 1. Coefficients Table
+#    (Already formatted as strings with stars, so no rounding needed here)
+print(kable(coef_grid_sig, 
+            caption = "Table 1: Coefficients across censoring points (* p<0.05, ** p<0.01)",
+            align = 'c'))
+
+# 2. Fit Statistics Table
+#    (Selecting key columns to avoid width issues, and rounding numbers)
+key_cols <- c("cpoint", "logLik", "AIC", "BIC", "rmse_uncensored", 
+              "pseudoR2_mcfadden", "obs_cens_w", "pred_cens_w")
+
+print(kable(fit_grid[, key_cols], 
+            digits = 3, 
+            caption = "Table 2: Model Fit Statistics by Censoring Point",
+            align = 'c'))
+
+
+library(ggplot2)
+
+# ============================================================
+# 3. COEFFICIENT PLOT (Visual Sensitivity Analysis) - FIXED
+# ============================================================
+
+# 1. Extract data from the results list into a single long data frame
+plot_data <- do.call(rbind, lapply(results, function(r) {
+  df <- r$out
+  df$Variable <- rownames(df)
+  df$cpoint   <- r$cpoint
+  
+  # FIX: Rename the standard error column safely (handles "Std. Error", "Std..Error", etc.)
+  # We look for the column index that contains "Std"
+  se_col_idx <- grep("Std", colnames(df))
+  colnames(df)[se_col_idx] <- "SE"
+  
+  return(df)
+}))
+
+# 2. Create the Confidence Intervals (95%)
+# Now plot_data$SE exists, so this math will work
+plot_data$lower <- plot_data$Estimate - 1.96 * plot_data$SE
+plot_data$upper <- plot_data$Estimate + 1.96 * plot_data$SE
+
+# 3. Plot
+# We facet by Variable so each coefficient gets its own panel
+p <- ggplot(plot_data, aes(x = cpoint, y = Estimate)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red", alpha = 0.5) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), alpha = 0.2, fill = "blue") +
+  geom_line(color = "blue") +
+  geom_point(size = 1.5) +
+  facet_wrap(~ Variable, scales = "free_y") +
+  theme_minimal() +
+  labs(
+    title = "Sensitivity of Coefficients to Censoring Point",
+    subtitle = "Shaded area = 95% Confidence Interval",
+    x = "Censoring Point (c)",
+    y = "Estimate (beta)"
+  )
+
+print(p)
