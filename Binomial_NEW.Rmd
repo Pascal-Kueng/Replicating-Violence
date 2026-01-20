@@ -1,0 +1,611 @@
+---
+title: "Tobit (intreg-style) vs Beta-binomial: Diagnostics & Model Comparison"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+
+options(scipen = 999)
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 8,
+  fig.height = 5
+)
+
+suppressPackageStartupMessages({
+  library(readxl)
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+})
+
+have_pkg <- function(p) requireNamespace(p, quietly = TRUE)
+
+round_df <- function(x, digits = 3) {
+  x %>% mutate(across(where(is.numeric), ~ round(.x, digits)))
+}
+
+add_goodfit_subtitle <- function(txt) {
+  mtext(txt, side = 3, line = 0.2, cex = 0.85)
+}
+
+good_line_txt <- "Good fit: points close to 45° line; no systematic over/under-prediction across periods."
+```
+
+## 1) Data and shared preprocessing
+
+```{r data}
+# Update path if needed
+# df_raw <- read_excel("S1_file_combined.xlsx")
+df_raw <- read_excel("S1_file_combined.xlsx")
+
+# Analysis dataset (Model 3 covariates)
+dat <- df_raw %>%
+  transmute(
+    tr_nop = as.numeric(tr_nop),
+    ncases = as.numeric(ncases),
+    co2LF  = as.factor(co2LF),
+    co2    = as.factor(co2),
+    T0n_   = as.numeric(`T0n_`),
+    T2be   = as.numeric(T2be),
+    T3bm   = as.numeric(T3bm),
+    T4bl   = as.numeric(T4bl),
+    T5i_   = as.numeric(`T5i_`),
+    battle = as.numeric(battle),
+    royal  = as.numeric(royal),
+    urban  = as.numeric(urban)
+  ) %>%
+  filter(
+    !is.na(tr_nop), !is.na(ncases), !is.na(co2LF), !is.na(co2),
+    !is.na(T0n_), !is.na(T2be), !is.na(T3bm), !is.na(T4bl), !is.na(T5i_),
+    !is.na(battle), !is.na(royal), !is.na(urban),
+    ncases > 0
+  )
+
+stopifnot(nrow(dat) == 82)
+
+# Match Stata base category if relevant
+if ("ir" %in% levels(dat$co2)) dat$co2 <- relevel(dat$co2, ref = "ir")
+
+# Period labels (used later)
+dat <- dat %>%
+  mutate(
+    period = case_when(
+      T0n_ == 1 ~ "T0n_",
+      T2be == 1 ~ "T2be",
+      T3bm == 1 ~ "T3bm",
+      T4bl == 1 ~ "T4bl",
+      T5i_ == 1 ~ "T5i_",
+      TRUE ~ "BASE"
+    )
+  )
+
+# Shared design matrix for Tobit/intreg model
+X <- model.matrix(
+  ~ T0n_ + T2be + T3bm + T4bl + T5i_ + battle + royal + urban + co2,
+  data = dat
+)
+K <- ncol(X)
+N <- nrow(dat)
+
+cluster <- dat$co2LF
+```
+
+## 2) Tobit / intreg-style model (Stata-replication likelihood)
+
+### 2.1 Fit model
+
+```{r tobit-fit}
+# Tobit/intreg outcome construction (unchanged)
+y <- ifelse(dat$tr_nop > 0, log(dat$tr_nop), NA_real_)
+is_cens <- dat$tr_nop == 0
+
+# Stata-normalized analytic weights: sum(a) = N (unchanged)
+a <- dat$ncases
+stopifnot(all(is.finite(a)), all(a > 0))
+a <- a * N / sum(a)
+
+# Left-censor point (baseline)
+cpoint <- -3
+
+loglik <- function(par) {
+  beta <- par[1:K]
+  lns  <- par[K + 1]
+  s <- exp(lns)
+  xb <- as.vector(X %*% beta)
+
+  ll <- numeric(N)
+
+  # Uncensored
+  idx_u <- which(!is_cens)
+  r <- y[idx_u] - xb[idx_u]
+  ll[idx_u] <- -0.5 * ( a[idx_u] * (r^2) / (s^2) + log(2*pi) + 2*lns - log(a[idx_u]) )
+
+  # Left-censored
+  idx_c <- which(is_cens)
+  t <- (cpoint - xb[idx_c]) * sqrt(a[idx_c]) / s
+  ll[idx_c] <- pnorm(t, log.p = TRUE)
+
+  sum(ll)
+}
+
+start <- c(rep(0, K), 0)
+fit <- optim(start, fn = function(p) -loglik(p), method = "BFGS", hessian = TRUE)
+stopifnot(fit$convergence == 0)
+
+theta <- fit$par
+beta_hat <- theta[1:K]
+lnsigma_hat <- theta[K + 1]
+sigma_hat <- exp(lnsigma_hat)
+
+xb <- as.vector(X %*% beta_hat)
+
+# Per-observation scores U for cluster-robust sandwich
+U <- matrix(0, nrow = N, ncol = K + 1)
+colnames(U) <- c(colnames(X), "lnsigma")
+
+# Uncensored scores
+idx_u <- which(!is_cens)
+r <- y[idx_u] - xb[idx_u]
+U[idx_u, 1:K]   <- (a[idx_u] * r / sigma_hat^2) * X[idx_u, , drop = FALSE]
+U[idx_u, K + 1] <- -1 + (a[idx_u] * r^2 / sigma_hat^2)
+
+# Censored scores
+idx_c <- which(is_cens)
+tc <- (cpoint - xb[idx_c]) * sqrt(a[idx_c]) / sigma_hat
+log_phi <- dnorm(tc, log = TRUE)
+log_Phi <- pnorm(tc, log.p = TRUE)
+lambda <- exp(pmin(log_phi - log_Phi, 700))
+
+U[idx_c, 1:K]   <- -(lambda * sqrt(a[idx_c]) / sigma_hat) * X[idx_c, , drop = FALSE]
+U[idx_c, K + 1] <- -(lambda * tc)
+
+# Cluster-robust sandwich
+bread <- solve(fit$hessian)
+Sg <- rowsum(U, cluster)
+meat <- crossprod(Sg)
+V_CR0 <- bread %*% meat %*% bread
+
+G <- nrow(Sg)
+V_stata <- (G/(G - 1)) * V_CR0  # Stata-style small-sample correction
+
+Vb <- V_stata[1:K, 1:K, drop = FALSE]
+se <- sqrt(diag(Vb))
+zv <- beta_hat / se
+pv <- 2 * pnorm(-abs(zv))
+
+out_tobit <- data.frame(
+  term = colnames(X),
+  estimate = beta_hat,
+  se_cr = se,
+  z = zv,
+  p = pv
+)
+
+cat("Tobit/intreg baseline fit complete.\n")
+round_df(out_tobit, 3)
+```
+
+### 2.2 Tobit diagnostics (fit, censoring calibration, surprises)
+
+```{r tobit-diagnostics}
+ll_hat <- loglik(theta)
+k_par <- K + 1
+AIC_t <- -2 * ll_hat + 2 * k_par
+BIC_t <- -2 * ll_hat + log(N) * k_par
+
+# Wald chi^2 for slopes (robust)
+idx_slope <- which(colnames(X) != "(Intercept)")
+b_slope <- beta_hat[idx_slope]
+V_slope <- Vb[idx_slope, idx_slope, drop = FALSE]
+Wald_chi2 <- as.numeric(t(b_slope) %*% solve(V_slope) %*% b_slope)
+df_wald <- length(idx_slope)
+p_wald <- pchisq(Wald_chi2, df = df_wald, lower.tail = FALSE)
+
+# Model-implied P(censored)
+sd_i <- sigma_hat / sqrt(a)
+p_cens_hat <- pnorm((cpoint - xb) / sd_i)
+
+# Observed vs predicted censoring rates
+obs_cens_unw  <- mean(is_cens)
+pred_cens_unw <- mean(p_cens_hat)
+obs_cens_w    <- weighted.mean(is_cens, w = a)
+pred_cens_w   <- weighted.mean(p_cens_hat, w = a)
+
+# Brier score for censoring indicator
+brier_w <- weighted.mean((as.numeric(is_cens) - p_cens_hat)^2, w = a)
+
+# RMSE among uncensored (descriptive)
+res_u <- y[!is_cens] - xb[!is_cens]
+rmse_u <- sqrt(weighted.mean(res_u^2, w = a[!is_cens]))
+
+# Null model for McFadden pseudo-R2
+loglik0 <- function(par0) {
+  b0 <- par0[1]
+  lns0 <- par0[2]
+  s0 <- exp(lns0)
+  xb0 <- rep(b0, N)
+
+  ll0 <- numeric(N)
+  idx_u0 <- which(!is_cens)
+  r0 <- y[idx_u0] - xb0[idx_u0]
+  ll0[idx_u0] <- -0.5 * ( a[idx_u0] * (r0^2) / (s0^2) + log(2*pi) + 2*lns0 - log(a[idx_u0]) )
+
+  idx_c0 <- which(is_cens)
+  t0 <- (cpoint - xb0[idx_c0]) * sqrt(a[idx_c0]) / s0
+  ll0[idx_c0] <- pnorm(t0, log.p = TRUE)
+
+  sum(ll0)
+}
+
+fit0 <- optim(c(0, 0), fn = function(p) -loglik0(p), method = "BFGS", hessian = TRUE)
+stopifnot(fit0$convergence == 0)
+ll_null <- loglik0(fit0$par)
+pseudoR2 <- 1 - (ll_hat / ll_null)
+
+# Surprise ranking (large values = surprising given model)
+p_unc_hat <- 1 - p_cens_hat
+surprise <- ifelse(is_cens, -log(p_cens_hat), -log(p_unc_hat))
+w_surprise <- a * surprise
+ord <- order(w_surprise, decreasing = TRUE)
+
+fit_stats_tobit <- data.frame(
+  N = N,
+  uncensored = sum(!is_cens),
+  left_censored = sum(is_cens),
+  clusters = G,
+  logLik = ll_hat,
+  AIC = AIC_t,
+  BIC = BIC_t,
+  Wald_chi2 = Wald_chi2,
+  df = df_wald,
+  p_value = p_wald,
+  obs_cens_unw = obs_cens_unw,
+  pred_cens_unw = pred_cens_unw,
+  obs_cens_w = obs_cens_w,
+  pred_cens_w = pred_cens_w,
+  brier_w = brier_w,
+  rmse_uncensored = rmse_u,
+  sigma = sigma_hat,
+  ll_null = ll_null,
+  pseudoR2_mcfadden = pseudoR2,
+  max_w_surprise = max(w_surprise)
+)
+
+round_df(fit_stats_tobit, 3)
+
+top_surprise <- data.frame(
+  row = ord[1:10],
+  weight_a = a[ord[1:10]],
+  xb = xb[ord[1:10]],
+  is_cens = is_cens[ord[1:10]],
+  p_cens = p_cens_hat[ord[1:10]],
+  w_surprise = w_surprise[ord[1:10]]
+)
+
+round_df(top_surprise, 3)
+```
+
+### 2.3 Tobit diagnostic plots
+
+```{r tobit-plots}
+op <- par(no.readonly = TRUE)
+par(mfrow = c(1, 2))
+
+plot(
+  xb[!is_cens], res_u,
+  xlab = "Fitted xb (latent mean)",
+  ylab = "Residual (y - xb) [uncensored]",
+  main = sprintf("Tobit/intreg (cpoint=%s): Residuals vs fitted", cpoint)
+)
+abline(h = 0, lty = 2)
+add_goodfit_subtitle("Good fit: residuals centered at 0; no strong pattern/heteroskedasticity across xb.")
+
+boxplot(
+  p_cens_hat ~ is_cens,
+  names = c("Uncensored", "Censored"),
+  ylab = "Predicted P(censored)",
+  main = sprintf("Tobit/intreg (cpoint=%s): P(censored) by observed status", cpoint)
+)
+add_goodfit_subtitle("Good fit: censored cases have higher predicted P(censored) than uncensored cases.")
+
+par(op)
+```
+
+## 3) Beta-binomial model (glmmTMB) on reconstructed counts
+
+### 3.1 Reconstruct integer counts
+
+```{r reconstruct-counts}
+dat2 <- dat %>%
+  select(period, everything()) %>%   # <-- ensure period is present
+  mutate(
+    n = as.integer(round(ncases)),
+    p = tr_nop,
+    k_raw = p * n,
+    k = as.integer(round(k_raw)),
+    k = pmin(pmax(k, 0L), n)
+  )
+
+stopifnot("period" %in% names(dat2))
+stopifnot(all(dat2$n > 0), all(dat2$p >= 0 & dat2$p <= 1))
+
+
+recon_check <- dat2 %>%
+  mutate(diff = k_raw - k) %>%
+  summarise(
+    max_abs_diff = max(abs(diff)),
+    mean_abs_diff = mean(abs(diff)),
+    share_exact_integer = mean(abs(diff) < 1e-8)
+  )
+
+round_df(recon_check, 3)
+```
+
+### 3.2 Fit beta-binomial and run diagnostics
+
+```{r betabin-fit}
+if (!have_pkg("glmmTMB")) stop("Please install glmmTMB")
+library(glmmTMB)
+
+f_bin <- cbind(k, n - k) ~ T0n_ + T2be + T3bm + T4bl + T5i_ + battle + royal + urban + co2
+
+m_bb <- glmmTMB(
+  f_bin,
+  data = dat2,
+  family = betabinomial(link = "logit")
+)
+
+summary(m_bb)
+
+# DHARMa residual diagnostics (titled)
+if (have_pkg("DHARMa")) {
+  library(DHARMa)
+  res_bb <- simulateResiduals(m_bb, plot = FALSE)
+  plot(res_bb)
+  print(testDispersion(res_bb))
+  print(testZeroInflation(res_bb))
+}
+```
+
+### 3.3 Cluster-robust inference (beta-binomial)
+
+```{r betabin-robust}
+
+# Cluster-robust HC0 (sandwich) from glmmTMB
+V_hc0 <- glmmTMB::vcovHC(m_bb, cluster = dat2$co2LF)  # HC0 only
+
+# Stata-style small-sample multiplier you used in Tobit
+G <- dplyr::n_distinct(dat2$co2LF)
+V_stata <- (G/(G - 1)) * V_hc0
+
+# Fixed effects (conditional) inference using z
+b  <- glmmTMB::fixef(m_bb)$cond
+Vb <- V_stata[names(b), names(b), drop = FALSE]
+
+se <- sqrt(diag(Vb))
+z  <- b / se
+p  <- 2 * pnorm(-abs(z))
+
+bb_inf <- data.frame(term = names(b), estimate = b, se_cr = se, z = z, p = p)
+bb_inf
+
+```
+
+## 4) Common-scale predictive checks (Tobit vs Beta-binomial)
+
+### 4.1 Predictions: mean share and P(zero)
+
+```{r predictions}
+# --- Tobit predictions on original SHARE scale via simulation ---
+set.seed(1)
+S <- 5000
+sd_i <- sigma_hat / sqrt(a)
+ystar <- matrix(rnorm(N * S), nrow = N, ncol = S)
+ystar <- xb + sd_i * ystar
+
+share_sim <- ifelse(ystar <= cpoint, 0, exp(ystar))
+share_hat_tobit <- rowMeans(share_sim)
+p0_hat_tobit <- rowMeans(ystar <= cpoint)
+
+# --- Beta-binomial predictions ---
+# Mean share (conditional mean) from glmmTMB
+p_hat_bb <- as.numeric(predict(m_bb, type = "response"))
+
+# P(k=0) via simulation
+set.seed(1)
+sim_obj <- simulate(m_bb, nsim = 500)
+# simulate(m_bb) returns a data.frame whose columns contain N x 2 matrices [k, n-k]
+sim_k_mat <- do.call(cbind, lapply(sim_obj, function(m) m[, 1]))
+stopifnot(nrow(sim_k_mat) == N, ncol(sim_k_mat) == 500)
+p0_hat_bb <- rowMeans(sim_k_mat == 0)
+
+# Attach predictions to dat2 for safe grouped summaries
+# (This prevents the classic weighted.mean length mismatch.)
+dat_pred <- dat2 %>%
+  mutate(
+    tobit_share_hat = share_hat_tobit,
+    tobit_p0_hat = p0_hat_tobit,
+    bb_share_hat = p_hat_bb,
+    bb_p0_hat = p0_hat_bb
+  )
+```
+
+### 4.2 Overall predictive check table
+
+```{r overall-checks}
+obs_share <- dat_pred$p
+obs_zero  <- (dat_pred$k == 0)
+
+summ_overall <- data.frame(
+  metric = c("mean_share_unw", "mean_share_w_n",
+             "zero_rate_unw", "zero_rate_w_n"),
+  observed = c(
+    mean(obs_share),
+    weighted.mean(obs_share, w = dat_pred$n),
+    mean(obs_zero),
+    weighted.mean(obs_zero, w = dat_pred$n)
+  ),
+  tobit = c(
+    mean(dat_pred$tobit_share_hat),
+    weighted.mean(dat_pred$tobit_share_hat, w = dat_pred$n),
+    mean(dat_pred$tobit_p0_hat),
+    weighted.mean(dat_pred$tobit_p0_hat, w = dat_pred$n)
+  ),
+  betabinomial = c(
+    mean(dat_pred$bb_share_hat),
+    weighted.mean(dat_pred$bb_share_hat, w = dat_pred$n),
+    mean(dat_pred$bb_p0_hat),
+    weighted.mean(dat_pred$bb_p0_hat, w = dat_pred$n)
+  )
+)
+
+round_df(as.data.frame(summ_overall), 3)
+```
+
+### 4.3 Predictive checks by period
+
+```{r by-period}
+# IMPORTANT: we summarise on dat_pred so x and w are always the same length in each group.
+
+by_period <- dat_pred %>%
+  group_by(period) %>%
+  summarise(
+    n_obs = n(),
+    obs_share_w_n = weighted.mean(p, w = n),
+    obs_zero_w_n  = weighted.mean(k == 0, w = n),
+    tobit_share_w_n = weighted.mean(tobit_share_hat, w = n),
+    tobit_p0_w_n    = weighted.mean(tobit_p0_hat, w = n),
+    bb_share_w_n    = weighted.mean(bb_share_hat, w = n),
+    bb_p0_w_n       = weighted.mean(bb_p0_hat, w = n)
+  )
+
+round_df(as.data.frame(by_period), 3)
+```
+
+### 4.4 Calibration plots by period (clearly titled)
+
+```{r calib-plots}
+op <- par(no.readonly = TRUE)
+par(mfrow = c(2, 2))
+
+# 1) Beta-binomial: zero rate
+plot(
+  by_period$obs_zero_w_n, by_period$bb_p0_w_n,
+  xlab = "Observed zero rate (weighted by n)",
+  ylab = "Predicted P(zero) (weighted by n)",
+  main = "Beta-binomial (glmmTMB): Zero-rate calibration by period",
+  pch = 19
+)
+add_goodfit_subtitle(good_line_txt)
+abline(0, 1, lty = 2)
+text(by_period$obs_zero_w_n, by_period$bb_p0_w_n, labels = by_period$period, pos = 4, cex = 0.8)
+
+# 2) Tobit: zero rate
+plot(
+  by_period$obs_zero_w_n, by_period$tobit_p0_w_n,
+  xlab = "Observed zero rate (weighted by n)",
+  ylab = "Predicted P(zero) (weighted by n)",
+  main = sprintf("Tobit/intreg (cpoint=%s): Zero-rate calibration by period", cpoint),
+  pch = 19
+)
+add_goodfit_subtitle(good_line_txt)
+abline(0, 1, lty = 2)
+text(by_period$obs_zero_w_n, by_period$tobit_p0_w_n, labels = by_period$period, pos = 4, cex = 0.8)
+
+# 3) Beta-binomial: mean share
+plot(
+  by_period$obs_share_w_n, by_period$bb_share_w_n,
+  xlab = "Observed mean trauma share (weighted by n)",
+  ylab = "Predicted mean trauma share (weighted by n)",
+  main = "Beta-binomial (glmmTMB): Mean-share calibration by period",
+  pch = 19
+)
+add_goodfit_subtitle("Good fit: points close to 45° line; errors not concentrated in specific periods.")
+abline(0, 1, lty = 2)
+text(by_period$obs_share_w_n, by_period$bb_share_w_n, labels = by_period$period, pos = 4, cex = 0.8)
+
+# 4) Tobit: mean share
+plot(
+  by_period$obs_share_w_n, by_period$tobit_share_w_n,
+  xlab = "Observed mean trauma share (weighted by n)",
+  ylab = "Predicted mean trauma share (weighted by n)",
+  main = sprintf("Tobit/intreg (cpoint=%s): Mean-share calibration by period", cpoint),
+  pch = 19
+)
+add_goodfit_subtitle("Good fit: points close to 45° line; no huge outliers (massive over-prediction).")
+abline(0, 1, lty = 2)
+text(by_period$obs_share_w_n, by_period$tobit_share_w_n, labels = by_period$period, pos = 4, cex = 0.8)
+
+par(op)
+```
+
+### 4.5 Zero calibration by deciles
+
+```{r zero-calibration}
+make_calibration <- function(p0_hat, obs_zero, w, name) {
+  cuts <- unique(quantile(p0_hat, probs = seq(0, 1, 0.1), na.rm = TRUE))
+  bin <- cut(p0_hat, breaks = cuts, include.lowest = TRUE)
+  tibble(bin = bin, p0_hat = p0_hat, obs_zero = obs_zero, w = w) %>%
+    group_by(bin) %>%
+    summarise(
+      n = n(),
+      pred_w = weighted.mean(p0_hat, w, na.rm = TRUE),
+      obs_w  = weighted.mean(obs_zero, w, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    mutate(model = name)
+}
+
+cal_all <- bind_rows(
+  make_calibration(dat_pred$tobit_p0_hat, (dat_pred$k == 0), dat_pred$n, "tobit"),
+  make_calibration(dat_pred$bb_p0_hat,    (dat_pred$k == 0), dat_pred$n, "betabinomial")
+)
+
+round_df(as.data.frame(cal_all), 3)
+```
+
+## 5) Tobit vs Beta-binomial: direction + significance table (rounded)
+
+```{r sign-compare}
+# Tobit: already has cluster-robust p-values
+# Beta-binomial: uses cluster-robust p-values if clubSandwich works, else model-based.
+
+# Prepare Tobit table
+term_t <- out_tobit$term
+names(term_t) <- NULL
+
+tobit_tbl <- out_tobit %>%
+  transmute(
+    term,
+    est_tobit = estimate,
+    p_tobit = p,
+    sign_tobit = ifelse(estimate > 0, "+", "-")
+  )
+
+# Prepare beta-binomial table (cluster-bootstrap inference)
+bb_tbl <- bb_inf %>%
+  transmute(
+    term,
+    est_bb  = estimate,
+    p_bb    = p,
+    sign_bb = ifelse(estimate > 0, "+", "-")
+  )
+
+
+comp <- inner_join(tobit_tbl, bb_tbl, by = "term") %>%
+  mutate(
+    agree_sign = (sign_tobit == sign_bb),
+    sig_tobit_05 = (p_tobit < 0.05),
+    sig_bb_05 = (p_bb < 0.05)
+  ) 
+
+round_df(as.data.frame(comp), 3)
+```
+
