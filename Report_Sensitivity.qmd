@@ -1,5 +1,5 @@
 ---
-title: "Report_Sensitivity"
+title: "Report Sensitivity Model 3"
 format: 
   html:
     embed-resources: true
@@ -72,7 +72,7 @@ knitr::kable(fit_grid[, cols_to_show],
              digits = 3,
              format = "markdown")
 ```
-
+*Note: Each row reports the Tobit/intreg-style model re-estimated with an alternative censoring point (c) (log scale), holding covariates, analytic weights, clustering, and estimation identical. (\text{obs_cens_w}) is the observed weighted share of left-censored observations (zeros), and (\text{pred_cens_w}) is the model-implied weighted probability of censoring averaged over observations.*
 
 **Implication.** The Tobit results—and in particular which period and proxy effects appear statistically supported—are sensitive to an analyst-chosen censoring threshold. This sensitivity reinforces that the Tobit/censoring formulation is not a robust basis for inference in a “count-out-of-$n$” setting.
 
@@ -88,7 +88,7 @@ While the Tobit model technically reports a lower AIC ($234.7$ vs $329.5$), thes
 
 
 ### 5. Re-evaluating the Paper’s Conclusions
-The choice of model alters the statistical significance of the findings, though not the direction of the effects (coefficient signs agree across all variables). The beta-binomial analysis suggests that the "fine-grained" temporal fluctuations reported in the paper are not robust to a count model with overdispersion. The evidence for these finer period differences is sensitive to the Tobit/censoring specification.
+The choice of model alters the statistical significance of the findings, though not the direction of the effects (coefficient signs agree across all variables).
 
 **Table 2: Comparison of Statistical Significance ($p < 0.05$)**
 
@@ -115,4 +115,10 @@ The Tobit model identified three other periods (`T0n_`, `T2be`, `T5i_`) as havin
 **C. New Insights:**
 * **Carbon Isotopes:** The model choice flips the significance of isotope proxies. In the beta-binomial model, `co2l` (low Carbon) becomes a significant negative predictor ($p=0.030$), while the `co2ms` effect found in the Tobit model fades to borderline non-significance ($p=0.051$).
 
-**Summary:** The robust evidence indicates a simpler story than originally claimed: violence spikes in specific contexts (Battles, Royal) and dips in `T3bm`, but other periods are statistically indistinguishable from the baseline once sample size is properly modeled.
+**Discussion of Robustness:**
+Comparing the beta-binomial results to the Tobit threshold sensitivity analysis (Section 4.1) suggests two patterns:
+
+1.  **Tobit-sensitive terms also differ most across model classes (`T2be`, `co2l`):** These covariates show noticeable changes in support across plausible Tobit censoring points, and they also change when moving from the Tobit (paper implementation) to the beta-binomial. This reinforces that inference for these terms is particularly dependent on the Tobit/censoring construction, whereas the beta-binomial avoids reliance on an analyst-chosen censoring threshold by modeling counts-out-of-$n$ directly.
+2.  **Some Tobit-stable period effects are still not robust (`T0n_`, `T5i_`):** Even when `T0n_` and `T5i_` remain significant across Tobit censoring points, they are not supported in the beta-binomial model. This indicates that the difference is not only about the censor threshold, but also about deeper structural features handled by the count model—especially overdispersion and how information scales with sample size ($n$).
+
+**Summary:** The robust evidence supports a simpler story: trauma prevalence is higher in `battle` and `royal` contexts and lower in `T3bm`, while additional period differences (`T0n_`, `T2be`, `T5i_`) are not robust to a count model with overdispersion and appear sensitive to the Tobit/censoring specification.
