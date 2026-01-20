@@ -7,7 +7,7 @@ format:
 
 #### 1. Discrepancies between the reported and implemented analysis
 
-The paper states that the dependent variable is log-transformed after adding a small constant (0.05) to accommodate zero trauma shares. Our replication indicates this is not what was implemented. We confirmed that the authors’ Stata code does not include the “+ 0.05” transformation step; accordingly, reproducing the published results does not require (and is not consistent with) a $\log(y + 0.05)$ specification.
+The paper states that the dependent variable is log-transformed after adding a small constant (0.05) to accommodate zero trauma shares. In the original estimation code we examined, we do not find a ‘+0.05’ transformation step. Accordingly, reproducing the published results does not require (and is not consistent with) a $\log(y + 0.05)$ specification. 
 
 Instead, the published estimates are exactly reproduced when the outcome is constructed as follows: the log is taken only for strictly positive trauma shares, and observations with a trauma share of zero are not transformed into a finite log value but are treated as left-censored at a fixed censoring point on the log scale (approximately −3). This is a substantively different procedure from adding a constant before logging. Under the implemented approach, zeros contribute to the likelihood through a censoring assumption (“latent below the threshold”) rather than through an observed transformed value. Because this censoring step is central to the model’s interpretation and to how zeros are handled, the mismatch between the paper’s description and the implemented code is consequential.
 
@@ -77,11 +77,11 @@ knitr::kable(fit_grid[, cols_to_show],
 
 
 #### 4.2 Comparing Model Fit and Predictive Accuracy to a Beta Binomial Specification
-The analysis sample consists of $N=82$ site-period observations (34 zero-trauma cases). To implement the beta-binomial model, continuous proportions were reconstructed into integer counts, ensuring the approximation is small (mean absolute discrepancy 0.021 counts), so the reconstructed counts closely track the original shares.
+The analysis sample consists of $N=82$ site-period observations (34 zero-trauma cases). To implement the beta-binomial model, continuous proportions were reconstructed into integer counts, ensuring the approximation is small (mean absolute discrepancy 0.021 individuals), so the reconstructed counts closely track the original shares.
 
 While the Tobit model technically reports a lower AIC ($234.7$ vs $329.5$), these metrics are **not comparable** because the models operate on different outcome scales (continuous log-density vs. discrete counts). Instead, we rely on "common-scale" predictive checks, which reveal severe miscalibration in the Tobit specification:
 
-* **Predictive Validity (The "Exploding Mean" Failure):** The Tobit model generates theoretically impossible predictions when projected back to the original scale. Because the latent normal is unbounded, $\exp(y^\ast)$ can be arbitrarily large; with heteroskedasticity from weights this yields extreme means. The weighted predicted mean trauma share for the Tobit model was **2,330.16**, compared to an observed weighted mean of **0.091**. This failure is systematic across periods: for example, the Tobit model predicts weighted means of **5,677** for period `Early_Bronze_Age` and **7,896** for `Middle_Bronze_Age`, against observed means of $< 0.10$. This occurs because the Tobit model applies analytic weights to the *log-scale* variance; when back-transformed to the natural scale, this inflated variance creates a heavy right tail that does not exist in the bounded $[0,1]$ data.
+* **Predictive Validity (The "Exploding Mean" Failure):** The Tobit model generates predictions outside the possible range [0,1] when projected back to the original scale. Because the latent normal is unbounded, $\exp(y^\ast)$ can be arbitrarily large; with heteroskedasticity from weights this yields extreme means. This is a property of exponentiating an unbounded normal index (lognormal moments), not a feature of the bounded data. The weighted predicted mean trauma share for the Tobit model was **2,330.16**, compared to an observed weighted mean of **0.091**. This failure is systematic across periods: for example, the Tobit model predicts weighted means of **5,677** for period `Early_Bronze_Age` and **7,896** for `Middle_Bronze_Age`, against observed means of $< 0.10$. This occurs because the Tobit model applies analytic weights to the *log-scale* variance; when back-transformed to the natural scale, this inflated variance creates a heavy right tail that does not exist in the bounded $[0,1]$ data.
 * **Zero-Inflation/Censoring:** The Tobit model fundamentally misidentifies the frequency of zeros. It predicts a weighted zero rate of **59.9%**, whereas the observed weighted zero rate is only **12.6%**. The beta-binomial model successfully recovers the data structure with a predicted zero rate of **16.4%**.
 * **Residual Diagnostics:** The beta-binomial model does not show evidence of misspecification. DHARMa simulation-based diagnostics confirm the residuals conform to expected distributions (KS test $p=0.59$) and that dispersion is correctly modeled ($p=0.36$), with no significant zero-inflation ($p=0.58$).
 
@@ -99,11 +99,11 @@ The choice of model alters the statistical significance of the findings, though 
 | **Neolithic** | Period 1 | **Sig** ($p<.001$) | NS ($p=.521$) | **Not Supported** |
 | **Early_Bronze_Age** | Period 2 | **Sig** ($p=.001$) | NS ($p=.854$) | **Not Supported** |
 | **Iron_Age** | Period 5 | **Sig** ($p<.001$) | NS ($p=.663$) | **Not Supported** |
-| **Regionms** | Geography (Mesopotamia) | **Sig** ($p=.005$) | Borderline ($p=.051$) | **Sensitive to model** |
+| **Regionms** | Geography (Mesopotamia) | **Sig** ($p=.005$) | Borderline ($p=.051$) | **Borderline Not Supported** |
 | **Regionl** | Geography (Levant) | NS ($p=.165$) | **Sig** ($p=.030$) | **New Finding** |
-| **Regiontr** | Geography (Turkey) | NS ($p=.079$)	| NS (p=.653) | **Robust** |
+| **Regiontr** | Geography (Turkey) | NS ($p=.070$)	| NS ($p=.653$) | **Consistently NS** |
 
-*Note: P-values derived from cluster-robust errors (N = 21 clusters).*
+*Note: P-values use cluster-robust standard errors with 21 clusters. Cluster-robust inference can differ substantially from model-based SEs for some coefficients. We apply the same cluster-robust/small-sample correction approach used for our Tobit replication to ensure maximal comparability across models.*
 
 **A. Conclusions Supported by Both Models (Robust):**
 * **Violence & Status:** Both models agree that `Battle_Sites` and `Royal_Interments` contexts are associated with significantly higher trauma prevalence.
@@ -113,7 +113,8 @@ The choice of model alters the statistical significance of the findings, though 
 The Tobit model identified three other periods (`Neolithic`, `Early_Bronze_Age`, `Iron_Age`) as having significantly lower trauma rates. **The beta-binomial model finds no evidence for this**, suggesting these effects could be artifacts of treating small-sample zeros as high-certainty data points.
 
 **C. New Insights:**
-* **Regional Heterogeneity:** The model choice flips the significance of regional fixed effects. In the beta-binomial model, Regionl (Levant) becomes a significant negative predictor ($p=0.030$), indicating that violence levels in the Levant (~10.8% in raw data) were significantly lower than in the reference region of Iran (~18.6%). This distinction was obscured in the Tobit model ($p=.165$).
+* **Geographic controls are model-dependent:**
+In the beta-binomial model Regionl (Levant) becomes statistically significant ($p=0.030$) while Regionms (Mesopotamia) is borderline non-significant ($p=0.051$), whereas the Tobit model supports Regionms ($p=0.005$) but not Regionl ($p=0.165$). Because geography is not the paper’s main focus, we treat these as secondary and emphasize the stability (or lack thereof) of the period and context effects.
 
 **Discussion of Robustness:**
 Comparing the beta-binomial results to the Tobit threshold sensitivity analysis (Section 4.1) suggests two patterns:
