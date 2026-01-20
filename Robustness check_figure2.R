@@ -1,7 +1,7 @@
 library(readxl)
 library(tidyverse)
 
-viol_data <- read_excel("/Users/jasmin/Library/Mobile Documents/com~apple~CloudDocs/PhD/Replication challenge/S1_file_combined.xlsx")
+viol_data <- read_excel("S1_file_combined.xlsx")
 
 # Explanation: For Figure 2, authors excluded all cases with less than 30 observations except for Late Bronze Turkey (n = 9) without providing a rationale for their decision
 # To check for robustness, we recreated their plot and then excluded all cases with less than 30 observations and then none to see how this affects the results

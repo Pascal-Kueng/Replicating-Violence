@@ -1,7 +1,7 @@
 library(readxl)
 library(dplyr)
 
-viol_data <- read_excel("/Users/jasmin/Library/Mobile Documents/com~apple~CloudDocs/PhD/Replication challenge/S1_file_combined.xlsx")
+viol_data <- read_excel("S1_file_combined.xlsx")
 
 # Explanation: Some of the rows in the data set are not merged despite all variables except for ratio/percentage one's being equal
 # To test for robustness, we ran model 3 on the original and merged data set and compared results
