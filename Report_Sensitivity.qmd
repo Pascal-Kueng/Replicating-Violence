@@ -100,8 +100,8 @@ The choice of model alters the statistical significance of the findings, though 
 | **Neolithic** | Period 1 | **Sig** ($p<.001$) | NS ($p=.521$) | **Not Supported** |
 | **Early_Bronze_Age** | Period 2 | **Sig** ($p=.001$) | NS ($p=.854$) | **Not Supported** |
 | **Iron_Age** | Period 5 | **Sig** ($p<.001$) | NS ($p=.663$) | **Not Supported** |
-| **Regionms** | Isotopes | **Sig** ($p=.005$) | Borderline ($p=.051$) | **Sensitive to model** |
-| **Regionl** | Isotopes | NS ($p=.165$) | **Sig** ($p=.030$) | **New Finding** |
+| **Regionms** | Geography (Mesopotamia) | **Sig** ($p=.005$) | Borderline ($p=.051$) | **Sensitive to model** |
+| **Regionl** | Geography (Levant) | NS ($p=.165$) | **Sig** ($p=.030$) | **New Finding** |
 
 *Note: P-values derived from cluster-robust errors (N = 21 clusters).*
 
@@ -113,7 +113,7 @@ The choice of model alters the statistical significance of the findings, though 
 The Tobit model identified three other periods (`Neolithic`, `Early_Bronze_Age`, `Iron_Age`) as having significantly lower trauma rates. **The beta-binomial model finds no evidence for this**, suggesting these effects could be artifacts of treating small-sample zeros as high-certainty data points.
 
 **C. New Insights:**
-* **Carbon Isotopes:** The model choice flips the significance of isotope proxies. In the beta-binomial model, `Regionl` (low Carbon) becomes a significant negative predictor ($p=0.030$), while the `Regionms` effect found in the Tobit model fades to borderline non-significance ($p=0.051$).
+* **Regional Heterogeneity:** The model choice flips the significance of regional fixed effects. In the beta-binomial model, Regionl (Levant) becomes a significant negative predictor ($p=0.030$). This indicates that violence levels in the Levant (~10.8% in raw data) were significantly lower than in the reference region of Iran (which had the highest raw violence rate at ~18.6%). This distinction was obscured in the Tobit model ($p=.165$), likely due to its structural assumptions regarding zero values (treating them as censored latents rather than observed counts). Meanwhile, the Regionms (Mesopotamia) effect, which was significant in the Tobit model, fades to borderline non-significance ($p=0.051$).
 
 **Discussion of Robustness:**
 Comparing the beta-binomial results to the Tobit threshold sensitivity analysis (Section 4.1) suggests two patterns:
