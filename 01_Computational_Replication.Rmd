@@ -20,7 +20,7 @@ library(dplyr)
 library(survival)   # survreg supports interval-censored Gaussian regression (Stata intreg analogue)
 library(knitr)
 
-# For clustered (co2LF) robust SEs
+# For clustered (Region_Period_Cluster_Unit) robust SEs
 
 # install.packages("clubSandwich")  # if needed
 
@@ -33,7 +33,7 @@ df <- read_excel("S1_file_combined.xlsx")
 
 # Verify required columns exist (these match the Stata do-file for Model 1)
 
-needed <- c("tr_nop","ncases","co2LF","T0n_","T2be","T3bm","T4bl","T5i_")
+needed <- c("tr_nop","ncases","Region_Period_Cluster_Unit","Neolithic","Early_Bronze_Age","Middle_Bronze_Age","Late_Bronze_Age","Iron_Age")
 stopifnot(all(needed %in% names(df)))
 
 # Basic sanity checks
@@ -41,7 +41,7 @@ stopifnot(all(needed %in% names(df)))
 nrow(df)
 summary(df$tr_nop)
 table(df$tr_nop == 0, useNA = "ifany")
-dplyr::n_distinct(df$co2LF)
+dplyr::n_distinct(df$Region_Period_Cluster_Unit)
 
 ```
 
@@ -86,7 +86,7 @@ report::report_table(df_m1$tr_nop)
 
 ```{r}
 m1 <- survreg(
-Surv(ltr_nop, ltr_nop2, type = "interval2") ~ `T0n_` + T2be + T3bm + T4bl + `T5i_`,
+Surv(ltr_nop, ltr_nop2, type = "interval2") ~ `Neolithic` + Early_Bronze_Age + Middle_Bronze_Age + Late_Bronze_Age + `Iron_Age`,
 data    = df_m1,
 dist    = "gaussian",
 weights = ncases
@@ -104,7 +104,7 @@ library(lmtest)
 # align cluster IDs to the estimation sample
 mf  <- model.frame(m1)
 idx <- as.integer(rownames(mf))
-cluster_used <- df_m1$co2LF[idx]
+cluster_used <- df_m1$Region_Period_Cluster_Unit[idx]
 
 V_cl <- vcovCL(m1, cluster = cluster_used, type = "HC0")
 
@@ -129,7 +129,7 @@ performance::check_model(m1)
 
 ```{r}
 # Data pieces
-X <- model.matrix(~ T0n_ + T2be + T3bm + T4bl + T5i_, data = df)
+X <- model.matrix(~ Neolithic + Early_Bronze_Age + Middle_Bronze_Age + Late_Bronze_Age + Iron_Age, data = df)
 y <- ifelse(df$tr_nop > 0, log(df$tr_nop), NA_real_)
 cpoint <- -3
 is_cens <- df$tr_nop == 0

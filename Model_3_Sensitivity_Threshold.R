@@ -185,7 +185,7 @@ run_full_pipeline_for_cpoint <- function(cpoint, start_par = NULL, seed_rq = 1) 
     resid = res_u[o_u[1:min(10, length(o_u))]],
     std_resid = std_res_u[o_u[1:min(10, length(o_u))]],
     weight_a = a[!is_cens][o_u[1:min(10, length(o_u))]],
-    co2LF = cluster[which(!is_cens)[o_u[1:min(10, length(o_u))]]]
+    Region_Period_Cluster_Unit = cluster[which(!is_cens)[o_u[1:min(10, length(o_u))]]]
   )
   
   # ---- Wald chi2 of slopes (exclude intercept) ----

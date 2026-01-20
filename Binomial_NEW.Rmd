@@ -50,51 +50,55 @@ dat <- df_raw %>%
   transmute(
     tr_nop = as.numeric(tr_nop),
     ncases = as.numeric(ncases),
-    co2LF  = as.factor(co2LF),
-    co2    = as.factor(co2),
-    T0n_   = as.numeric(`T0n_`),
-    T2be   = as.numeric(T2be),
-    T3bm   = as.numeric(T3bm),
-    T4bl   = as.numeric(T4bl),
-    T5i_   = as.numeric(`T5i_`),
-    battle = as.numeric(battle),
-    royal  = as.numeric(royal),
-    urban  = as.numeric(urban)
+    Region_Period_Cluster_Unit  = as.factor(co2LF),
+    Region    = as.factor(co2),
+    
+    # period indicators (unchanged)
+    Neolithic   = as.numeric(`T0n_`),
+    Early_Bronze_Age   = as.numeric(T2be),
+    Middle_Bronze_Age   = as.numeric(T3bm),
+    Late_Bronze_Age   = as.numeric(T4bl),
+    Iron_Age   = as.numeric(`T5i_`),
+    
+    # Model 3 covariates
+    Battle_Sites = as.numeric(battle),
+    Royal_Interments  = as.numeric(royal),
+    Urban  = as.numeric(urban)
   ) %>%
   filter(
-    !is.na(tr_nop), !is.na(ncases), !is.na(co2LF), !is.na(co2),
-    !is.na(T0n_), !is.na(T2be), !is.na(T3bm), !is.na(T4bl), !is.na(T5i_),
-    !is.na(battle), !is.na(royal), !is.na(urban),
+    !is.na(tr_nop), !is.na(ncases), !is.na(Region_Period_Cluster_Unit), !is.na(Region),
+    !is.na(Neolithic), !is.na(Early_Bronze_Age), !is.na(Middle_Bronze_Age), !is.na(Late_Bronze_Age), !is.na(Iron_Age),
+    !is.na(Battle_Sites), !is.na(Royal_Interments), !is.na(Urban),
     ncases > 0
   )
 
 stopifnot(nrow(dat) == 82)
 
 # Match Stata base category if relevant
-if ("ir" %in% levels(dat$co2)) dat$co2 <- relevel(dat$co2, ref = "ir")
+if ("ir" %in% levels(dat$Region)) dat$Region <- relevel(dat$Region, ref = "ir")
 
 # Period labels (used later)
 dat <- dat %>%
   mutate(
     period = case_when(
-      T0n_ == 1 ~ "T0n_",
-      T2be == 1 ~ "T2be",
-      T3bm == 1 ~ "T3bm",
-      T4bl == 1 ~ "T4bl",
-      T5i_ == 1 ~ "T5i_",
+      Neolithic == 1 ~ "Neolithic",
+      Early_Bronze_Age == 1 ~ "Early_Bronze_Age",
+      Middle_Bronze_Age == 1 ~ "Middle_Bronze_Age",
+      Late_Bronze_Age == 1 ~ "Late_Bronze_Age",
+      Iron_Age == 1 ~ "Iron_Age",
       TRUE ~ "BASE"
     )
   )
 
 # Shared design matrix for Tobit/intreg model
 X <- model.matrix(
-  ~ T0n_ + T2be + T3bm + T4bl + T5i_ + battle + royal + urban + co2,
+  ~ Neolithic + Early_Bronze_Age + Middle_Bronze_Age + Late_Bronze_Age + Iron_Age + Battle_Sites + Royal_Interments + Urban + Region,
   data = dat
 )
 K <- ncol(X)
 N <- nrow(dat)
 
-cluster <- dat$co2LF
+cluster <- dat$Region_Period_Cluster_Unit
 ```
 
 ## 2) Tobit / intreg-style model (Stata-replication likelihood)
@@ -354,7 +358,7 @@ round_df(recon_check, 3)
 if (!have_pkg("glmmTMB")) stop("Please install glmmTMB")
 library(glmmTMB)
 
-f_bin <- cbind(k, n - k) ~ T0n_ + T2be + T3bm + T4bl + T5i_ + battle + royal + urban + co2
+f_bin <- cbind(k, n - k) ~ Neolithic + Early_Bronze_Age + Middle_Bronze_Age + Late_Bronze_Age + Iron_Age + Battle_Sites + Royal_Interments + Urban + Region
 
 m_bb <- glmmTMB(
   f_bin,
@@ -379,10 +383,10 @@ if (have_pkg("DHARMa")) {
 ```{r betabin-robust}
 
 # Cluster-robust HC0 (sandwich) from glmmTMB
-V_hc0 <- glmmTMB::vcovHC(m_bb, cluster = dat2$co2LF)  # HC0 only
+V_hc0 <- glmmTMB::vcovHC(m_bb, cluster = dat2$Region_Period_Cluster_Unit)  # HC0 only
 
 # Stata-style small-sample multiplier you used in Tobit
-G <- dplyr::n_distinct(dat2$co2LF)
+G <- dplyr::n_distinct(dat2$Region_Period_Cluster_Unit)
 V_stata <- (G/(G - 1)) * V_hc0
 
 # Fixed effects (conditional) inference using z

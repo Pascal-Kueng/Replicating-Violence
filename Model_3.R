@@ -1,10 +1,10 @@
 # ============================================================
 # Replicate Stata Table 2, Model 3:
-# xi: intreg ltr_nop ltr_nop2 T0n_ T2be T3bm T4bl T5i_ battle royal urban i.co2
-#     [aw=ncases], robust cl(co2LF)
+# xi: intreg ltr_nop ltr_nop2 Neolithic Early_Bronze_Age Middle_Bronze_Age Late_Bronze_Age Iron_Age Battle_Sites Royal_Interments Urban i.Region
+#     [aw=ncases], robust cl(Region_Period_Cluster_Unit)
 #
 # NOTE: Estimation code is unchanged vs your Model 1 replica.
-# Only covariates + i.co2 dummies are added to X (and required vars to dat).
+# Only covariates + i.Region dummies are added to X (and required vars to dat).
 # ============================================================
 
 # --- Packages ---
@@ -21,40 +21,40 @@ dat <- df_raw %>%
     ncases = as.numeric(ncases),
     
     # cluster var (as in your model 1)
-    co2LF  = as.factor(co2LF),
+    Region_Period_Cluster_Unit  = as.factor(co2LF),
     
-    # Model 3 additions (for xi: i.co2)
-    co2    = as.factor(co2),
+    # Model 3 additions (for xi: i.Region)
+    Region    = as.factor(co2),
     
     # period indicators (unchanged)
-    T0n_   = as.numeric(`T0n_`),
-    T2be   = as.numeric(T2be),
-    T3bm   = as.numeric(T3bm),
-    T4bl   = as.numeric(T4bl),
-    T5i_   = as.numeric(`T5i_`),
+    Neolithic   = as.numeric(`T0n_`),
+    Early_Bronze_Age   = as.numeric(T2be),
+    Middle_Bronze_Age   = as.numeric(T3bm),
+    Late_Bronze_Age   = as.numeric(T4bl),
+    Iron_Age   = as.numeric(`T5i_`),
     
     # Model 3 covariates
-    battle = as.numeric(battle),
-    royal  = as.numeric(royal),
-    urban  = as.numeric(urban)
+    Battle_Sites = as.numeric(battle),
+    Royal_Interments  = as.numeric(royal),
+    Urban  = as.numeric(urban)
   ) %>%
   filter(
-    !is.na(tr_nop), !is.na(ncases), !is.na(co2LF),
-    !is.na(co2),
-    !is.na(T0n_), !is.na(T2be), !is.na(T3bm), !is.na(T4bl), !is.na(T5i_),
-    !is.na(battle), !is.na(royal), !is.na(urban),
+    !is.na(tr_nop), !is.na(ncases), !is.na(Region_Period_Cluster_Unit),
+    !is.na(Region),
+    !is.na(Neolithic), !is.na(Early_Bronze_Age), !is.na(Middle_Bronze_Age), !is.na(Late_Bronze_Age), !is.na(Iron_Age),
+    !is.na(Battle_Sites), !is.na(Royal_Interments), !is.na(Urban),
     ncases > 0
   )
 
 stopifnot(nrow(dat) == 82)
 
-# Match Stata xi: default base category for i.co2 (typically "ir" if present)
-if ("ir" %in% levels(dat$co2)) dat$co2 <- relevel(dat$co2, ref = "ir")
+# Match Stata xi: default base category for i.Region (typically "ir" if present)
+if ("ir" %in% levels(dat$Region)) dat$Region <- relevel(dat$Region, ref = "ir")
 
 # --- Model pieces ---
-# Model 3: add battle + royal + urban + i.co2
+# Model 3: add Battle_Sites + Royal_Interments + Urban + i.Region
 X <- model.matrix(
-  ~ T0n_ + T2be + T3bm + T4bl + T5i_ + battle + royal + urban + co2,
+  ~ Neolithic + Early_Bronze_Age + Middle_Bronze_Age + Late_Bronze_Age + Iron_Age + Battle_Sites + Royal_Interments + Urban + Region,
   data = dat
 )  # includes intercept
 
@@ -69,7 +69,7 @@ cpoint <- -3
 a <- dat$ncases
 a <- a * N / sum(a)
 
-cluster <- dat$co2LF
+cluster <- dat$Region_Period_Cluster_Unit
 stopifnot(length(cluster) == N)
 
 # --- Log-likelihood: Stata intreg with aweights (sigma/sqrt(a)) ---
@@ -411,7 +411,7 @@ top_outliers <- data.frame(
   resid = res_u[ord[1:top_k]],
   std_resid = std_res_u[ord[1:top_k]],
   weight_a = a[!is_cens][ord[1:top_k]],
-  co2LF = cluster[which(!is_cens)[ord[1:top_k]]]
+  Region_Period_Cluster_Unit = cluster[which(!is_cens)[ord[1:top_k]]]
 )
 
 cat("\nTop uncensored outliers by |standardized residual|:\n")
