@@ -1,9 +1,46 @@
 ---
 title: "Report Sensitivity Model 3"
-format: 
+format:
   html:
     embed-resources: true
+    toc: true
+    theme: cosmo
+    fontsize: 1.05em
+  pdf:
+    toc: true
+    number-sections: true
+    pdf-engine: xelatex
+    documentclass: scrartcl
+    fontsize: 11pt
+    geometry: margin=1in
+    mainfont: "TeX Gyre Pagella"
+    sansfont: "TeX Gyre Heros"
+    monofont: "Latin Modern Mono"
+    linestretch: 1.15
+    highlight-style: github
+    keep-tex: false
+    include-in-header:
+      text: |
+        % Tables
+        \usepackage{booktabs}
+        \usepackage{longtable}
+        \usepackage{array}
+        \usepackage{caption}
+        \captionsetup{font=small,labelfont=bf}
+
+        % Better typography / spacing
+        \usepackage{microtype}
+        \usepackage{setspace}
+
+        % Prevent ugly overfull lines
+        \usepackage{ragged2e}
+        \setlength{\emergencystretch}{3em}
+
+        % Slightly nicer section styling (KOMA)
+        \KOMAoption{numbers}{noendperiod}
+        \KOMAoption{captions}{tableheading}
 ---
+
 
 #### 1. Discrepancies between the reported and implemented analysis
 
@@ -71,7 +108,7 @@ knitr::kable(fit_grid[, cols_to_show],
              digits = 3,
              format = "markdown")
 ```
-*Note: Each row reports the Tobit/intreg-style model re-estimated with an alternative censoring point (c) (log scale), holding covariates, analytic weights, clustering, and estimation identical. (\text{obs_cens_w}) is the observed weighted share of left-censored observations (zeros), and (\text{pred_cens_w}) is the model-implied weighted probability of censoring averaged over observations.*
+*Note: Each row reports the Tobit/intreg-style model re-estimated with an alternative censoring point (c) (log scale), holding covariates, analytic weights, clustering, and estimation identical. (`obs_cens_w`) is the observed weighted share of left-censored observations (zeros), and (`pred_cens_w`) is the model-implied weighted probability of censoring averaged over observations.*
 
 **Implication.** The Tobit results—and in particular which period and proxy effects appear statistically supported—are sensitive to an analyst-chosen censoring threshold. This sensitivity reinforces that the Tobit/censoring formulation is not a robust basis for inference in a “count-out-of-$n$” setting.
 
