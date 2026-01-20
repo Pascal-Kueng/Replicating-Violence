@@ -5,7 +5,6 @@ format:
     embed-resources: true
 ---
 
-
 #### 1. Discrepancies between the reported and implemented analysis
 
 The paper states that the dependent variable is log-transformed after adding a small constant (0.05) to accommodate zero trauma shares. Our replication indicates this is not what was implemented. We confirmed that the authors’ Stata code does not include the “+ 0.05” transformation step; accordingly, reproducing the published results does not require (and is not consistent with) a $\log(y + 0.05)$ specification.
@@ -14,11 +13,11 @@ Instead, the published estimates are exactly reproduced when the outcome is cons
 
 #### 2. Why the censored Tobit/intreg approach is conceptually misaligned with the data
 
-The authors likely employed the Tobit specification as a mechanical solution to the "log of zero" problem. However, this choice inadvertently imposes structural assumptions that are conceptually misaligned with bioarchaeological data. The trauma measure is a proportion derived from counts—trauma cases observed out of the number of examined skeletons in a site–period. In this setting, a zero share typically means “0 cases out of $n$ examined,” not that an underlying continuous latent variable has been censored by a detection limit. Tobit’s key assumption—that there exists an unbounded latent normal outcome that can fall below a threshold and then becomes censored—does not naturally correspond to a “count out of $n$” data-generating process.
+The Tobit specification can be seen as a mechanical attempt to solve the "log of zero" problem. However, this choice inadvertently imposes structural assumptions that are conceptually misaligned with bioarchaeological data. The trauma measure is a proportion derived from counts—trauma cases observed out of the number of examined skeletons in a site–period. In this setting, a zero share typically means “0 cases out of $n$ examined,” not that an underlying continuous latent variable has been censored by a detection limit. Tobit’s key assumption—that there exists an unbounded latent normal outcome that can fall below a threshold and then becomes censored—does not naturally correspond to a “count out of $n$” data-generating process.
 
 A related concern is that the information content of a zero depends heavily on the denominator. Observing 0 cases out of a large $n$ provides much stronger evidence that the underlying rate is near zero than observing 0 cases out of a small $n$. In the authors' Tobit setup, zeros are handled via a fixed censoring point (roughly equivalent to a 5% violence rate). In this model, both 0/5 and 0/500 enter as “left-censored below the same threshold”. Weights can change influence, but the likelihood still does not reflect the binomial sampling evidence that makes 0/500 far more informative than 0/5.
 
-Finally, proportional/count outcomes have a mean–variance relationship dictated by binomial sampling (and often additional overdispersion). The Tobit framework assumes (on the latent scale) a constant-variance normal distUrbance; analytic weights can rescale contributions to the likelihood, but they do not make the Tobit likelihood equivalent to the count-based sampling process that generated the data, nor do they automatically recover the correct dependence of variance on both $n$ and the mean.
+Finally, proportional/count outcomes have a mean–variance relationship dictated by binomial sampling (and often additional overdispersion). The Tobit framework assumes (on the latent scale) a constant-variance normal disturbance; analytic weights can rescale contributions to the likelihood, but they do not make the Tobit likelihood equivalent to the count-based sampling process that generated the data, nor do they automatically recover the correct dependence of variance on both $n$ and the mean.
 
 #### 3. Why a beta-binomial model is conceptually better
 
@@ -78,13 +77,13 @@ knitr::kable(fit_grid[, cols_to_show],
 
 
 #### 4.2 Comparing Model Fit and Predictive Accuracy to a Beta Binomial Specification
-The analysis sample consists of $N=82$ site-period observations (34 zero-trauma cases). To implement the beta-binomial model, continuous proportions were reconstructed into integer counts, ensuring the approximation is small (mean absolute discrepancy 0.021), so the reconstructed counts closely track the original shares.
+The analysis sample consists of $N=82$ site-period observations (34 zero-trauma cases). To implement the beta-binomial model, continuous proportions were reconstructed into integer counts, ensuring the approximation is small (mean absolute discrepancy 0.021 counts), so the reconstructed counts closely track the original shares.
 
 While the Tobit model technically reports a lower AIC ($234.7$ vs $329.5$), these metrics are **not comparable** because the models operate on different outcome scales (continuous log-density vs. discrete counts). Instead, we rely on "common-scale" predictive checks, which reveal severe miscalibration in the Tobit specification:
 
 * **Predictive Validity (The "Exploding Mean" Failure):** The Tobit model generates theoretically impossible predictions when projected back to the original scale. Because the latent normal is unbounded, $\exp(y^\ast)$ can be arbitrarily large; with heteroskedasticity from weights this yields extreme means. The weighted predicted mean trauma share for the Tobit model was **2,330.16**, compared to an observed weighted mean of **0.091**. This failure is systematic across periods: for example, the Tobit model predicts weighted means of **5,677** for period `Early_Bronze_Age` and **7,896** for `Middle_Bronze_Age`, against observed means of $< 0.10$. This occurs because the Tobit model applies analytic weights to the *log-scale* variance; when back-transformed to the natural scale, this inflated variance creates a heavy right tail that does not exist in the bounded $[0,1]$ data.
 * **Zero-Inflation/Censoring:** The Tobit model fundamentally misidentifies the frequency of zeros. It predicts a weighted zero rate of **59.9%**, whereas the observed weighted zero rate is only **12.6%**. The beta-binomial model successfully recovers the data structure with a predicted zero rate of **16.4%**.
-* **Residual Diagnostics:** The beta-binomial model shows no evidence of misspecification. DHARMa simulation-based diagnostics confirm the residuals conform to expected distributions (KS test $p=0.59$) and that dispersion is correctly modeled ($p=0.36$), with no significant zero-inflation ($p=0.58$).
+* **Residual Diagnostics:** The beta-binomial model does not show evidence of misspecification. DHARMa simulation-based diagnostics confirm the residuals conform to expected distributions (KS test $p=0.59$) and that dispersion is correctly modeled ($p=0.36$), with no significant zero-inflation ($p=0.58$).
 
 
 ### 5. Re-evaluating the Paper’s Conclusions
@@ -102,6 +101,7 @@ The choice of model alters the statistical significance of the findings, though 
 | **Iron_Age** | Period 5 | **Sig** ($p<.001$) | NS ($p=.663$) | **Not Supported** |
 | **Regionms** | Geography (Mesopotamia) | **Sig** ($p=.005$) | Borderline ($p=.051$) | **Sensitive to model** |
 | **Regionl** | Geography (Levant) | NS ($p=.165$) | **Sig** ($p=.030$) | **New Finding** |
+| **Regiontr** | Geography (Turkey) | NS ($p=.079$)	| NS (p=.653) | **Robust** |
 
 *Note: P-values derived from cluster-robust errors (N = 21 clusters).*
 
@@ -113,7 +113,7 @@ The choice of model alters the statistical significance of the findings, though 
 The Tobit model identified three other periods (`Neolithic`, `Early_Bronze_Age`, `Iron_Age`) as having significantly lower trauma rates. **The beta-binomial model finds no evidence for this**, suggesting these effects could be artifacts of treating small-sample zeros as high-certainty data points.
 
 **C. New Insights:**
-* **Regional Heterogeneity:** The model choice flips the significance of regional fixed effects. In the beta-binomial model, Regionl (Levant) becomes a significant negative predictor ($p=0.030$). This indicates that violence levels in the Levant (~10.8% in raw data) were significantly lower than in the reference region of Iran (which had the highest raw violence rate at ~18.6%). This distinction was obscured in the Tobit model ($p=.165$), likely due to its structural assumptions regarding zero values (treating them as censored latents rather than observed counts). Meanwhile, the Regionms (Mesopotamia) effect, which was significant in the Tobit model, fades to borderline non-significance ($p=0.051$).
+* **Regional Heterogeneity:** The model choice flips the significance of regional fixed effects. In the beta-binomial model, Regionl (Levant) becomes a significant negative predictor ($p=0.030$), indicating that violence levels in the Levant (~10.8% in raw data) were significantly lower than in the reference region of Iran (~18.6%). This distinction was obscured in the Tobit model ($p=.165$).
 
 **Discussion of Robustness:**
 Comparing the beta-binomial results to the Tobit threshold sensitivity analysis (Section 4.1) suggests two patterns:
