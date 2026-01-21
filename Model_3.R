@@ -461,3 +461,6 @@ head(data.frame(
   w_surprise = w_surprise[o2]
 ), 10)
 
+
+report::report_packages()
+

@@ -4,6 +4,8 @@
 # (ONLY cpoint changes; everything else identical)
 # ============================================================
 
+source(Model_3.R)
+
 run_full_pipeline_for_cpoint <- function(cpoint, start_par = NULL, seed_rq = 1) {
   
   # ---- loglik for this cpoint (identical structure) ----
@@ -275,7 +277,7 @@ format_est_sig <- function(model_res) {
                   ifelse(pval < 0.05, "*", ""))
   
   # Format string
-  sprintf("%.3f%s", est, stars)
+  sprintf("%.3f%s (%.3f)", est, stars, se)
 }
 
 # Combine results into a matrix
@@ -360,3 +362,6 @@ p <- ggplot(plot_data, aes(x = cpoint, y = Estimate)) +
   )
 
 print(p)
+
+
+report::report_packages()

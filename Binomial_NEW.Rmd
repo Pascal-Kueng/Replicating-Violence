@@ -1,13 +1,13 @@
 ---
 title: "Tobit (intreg-style) vs Beta-binomial: Diagnostics & Model Comparison"
 output:
-  pdf_document:
-    toc: true
-    toc_depth: '3'
   html_document:
     toc: true
     toc_depth: 3
     number_sections: true
+  pdf_document:
+    toc: true
+    toc_depth: '3'
 ---
 
 ```{r setup, include=FALSE}
@@ -615,4 +615,10 @@ comp <- inner_join(tobit_tbl, bb_tbl, by = "term") %>%
 
 round_df(as.data.frame(comp), 3)
 ```
+
+```{r}
+report::report_packages()
+```
+
+
 

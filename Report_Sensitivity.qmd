@@ -129,3 +129,6 @@ Comparing the beta-binomial results to the Tobit threshold sensitivity analysis 
 2.  **Some Tobit-stable period effects are still not robust (`Neolithic`, `Iron_Age`):** Even when `Neolithic` and `Iron_Age` remain significant across Tobit censoring points, they are not supported in the beta-binomial model. This indicates that the difference is not only about the censor threshold, but also about deeper structural features handled by the count model—especially overdispersion and how information scales with sample size ($n$).
 
 **Summary:** The robust evidence supports a simpler story: trauma prevalence is higher in `Battle_Sites` and `Royal_Interments` contexts and lower in `Middle_Bronze_Age`, while additional period differences (`Neolithic`, `Early_Bronze_Age`, `Iron_Age`) are not robust to a count model with overdispersion and appear sensitive to the Tobit/censoring specification.
+
+
+
