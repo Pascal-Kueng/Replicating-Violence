@@ -3,42 +3,6 @@ title: "Report Sensitivity Model 3"
 format:
   html:
     embed-resources: true
-    toc: true
-    theme: cosmo
-    fontsize: 1.05em
-  pdf:
-    toc: true
-    number-sections: true
-    pdf-engine: xelatex
-    documentclass: scrartcl
-    fontsize: 11pt
-    geometry: margin=1in
-    mainfont: "TeX Gyre Pagella"
-    sansfont: "TeX Gyre Heros"
-    monofont: "Latin Modern Mono"
-    linestretch: 1.15
-    highlight-style: github
-    keep-tex: false
-    include-in-header:
-      text: |
-        % Tables
-        \usepackage{booktabs}
-        \usepackage{longtable}
-        \usepackage{array}
-        \usepackage{caption}
-        \captionsetup{font=small,labelfont=bf}
-
-        % Better typography / spacing
-        \usepackage{microtype}
-        \usepackage{setspace}
-
-        % Prevent ugly overfull lines
-        \usepackage{ragged2e}
-        \setlength{\emergencystretch}{3em}
-
-        % Slightly nicer section styling (KOMA)
-        \KOMAoption{numbers}{noendperiod}
-        \KOMAoption{captions}{tableheading}
 ---
 
 
