@@ -1,6 +1,10 @@
 # Replicating Violence
 
-Replication and sensitivity analyses for Baten, Benati, and Soltysiak (2023), "Violence trends in the ancient Middle East between 12,000 and 400 BCE" (Nature Human Behaviour). This repo reproduces the paper's Model 3 (Stata intreg/Tobit), explores censoring threshold sensitivity, compares to a beta-binomial alternative, and runs robustness checks.
+Replication and sensitivity analyses for:
+
+Baten, J., Benati, G., & Sołtysiak, A. (2023). Violence trends in the ancient Middle East between 12,000 and 400 BCE. *Nature Human Behaviour*, *7*(12), 2064–2073. [https://doi.org/10.1038/s41562-023-01700-y](https://doi.org/10.1038/s41562-023-01700-y)
+
+This repo reproduces the paper's Model 3 (Stata intreg/Tobit), explores censoring threshold sensitivity, compares to a beta-binomial alternative, and runs robustness checks.
 
 ## Data and sources
 - `S1_file_combined.xlsx` - primary analysis dataset (site-period level).
