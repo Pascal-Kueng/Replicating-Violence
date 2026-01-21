@@ -32,12 +32,31 @@ library(clubSandwich)
 data_url <- "https://zenodo.org/records/8010025/files/S1_file_combined.xlsx?download=1"
 tmp_file <- tempfile(fileext = ".xlsx")
 download.file(data_url, destfile = tmp_file, mode = "wb", quiet = TRUE)
-df <- read_excel(tmp_file)
+df_raw <- read_excel(tmp_file)
 unlink(tmp_file)
 
 # Verify required columns exist (these match the Stata do-file for Model 1)
 
-needed <- c("tr_nop","ncases","Region_Period_Cluster_Unit","Neolithic","Early_Bronze_Age","Middle_Bronze_Age","Late_Bronze_Age","Iron_Age")
+df <- df_raw %>%
+  transmute(
+    tr_nop = as.numeric(tr_nop),
+    ncases = as.numeric(ncases),
+    Region_Period_Cluster_Unit = as.factor(co2LF),
+    Neolithic = as.numeric(`T0n_`),
+    Early_Bronze_Age = as.numeric(T2be),
+    Middle_Bronze_Age = as.numeric(T3bm),
+    Late_Bronze_Age = as.numeric(T4bl),
+    Iron_Age = as.numeric(`T5i_`)
+  ) %>%
+  filter(
+    !is.na(tr_nop), !is.na(ncases), !is.na(Region_Period_Cluster_Unit),
+    !is.na(Neolithic), !is.na(Early_Bronze_Age), !is.na(Middle_Bronze_Age),
+    !is.na(Late_Bronze_Age), !is.na(Iron_Age),
+    ncases > 0
+  )
+
+needed <- c("tr_nop", "ncases", "Region_Period_Cluster_Unit", "Neolithic",
+            "Early_Bronze_Age", "Middle_Bronze_Age", "Late_Bronze_Age", "Iron_Age")
 stopifnot(all(needed %in% names(df)))
 
 # Basic sanity checks
@@ -175,4 +194,3 @@ beta_hat
 sigma_hat
 
 ```
-
