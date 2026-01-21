@@ -44,9 +44,11 @@ good_line_txt <- "Good fit: points close to 45° line; no systematic over/under-
 ## 1) Data and shared preprocessing
 
 ```{r data}
-# Update path if needed
-# df_raw <- read_excel("S1_file_combined.xlsx")
-df_raw <- read_excel("S1_file_combined.xlsx")
+data_url <- "https://zenodo.org/records/8010025/files/S1_file_combined.xlsx?download=1"
+tmp_file <- tempfile(fileext = ".xlsx")
+download.file(data_url, destfile = tmp_file, mode = "wb", quiet = TRUE)
+df_raw <- read_excel(tmp_file)
+unlink(tmp_file)
 
 # Analysis dataset (Model 3 covariates)
 dat <- df_raw %>%
@@ -619,6 +621,4 @@ round_df(as.data.frame(comp), 3)
 ```{r}
 report::report_packages()
 ```
-
-
 

@@ -29,7 +29,11 @@ library(clubSandwich)
 ```
 
 ```{r}
-df <- read_excel("S1_file_combined.xlsx")
+data_url <- "https://zenodo.org/records/8010025/files/S1_file_combined.xlsx?download=1"
+tmp_file <- tempfile(fileext = ".xlsx")
+download.file(data_url, destfile = tmp_file, mode = "wb", quiet = TRUE)
+df <- read_excel(tmp_file)
+unlink(tmp_file)
 
 # Verify required columns exist (these match the Stata do-file for Model 1)
 
@@ -171,6 +175,4 @@ beta_hat
 sigma_hat
 
 ```
-
-
 

@@ -7,9 +7,7 @@ Baten, J., Benati, G., & Sołtysiak, A. (2023). Violence trends in the ancient M
 This repo reproduces the paper's Model 3 (Stata intreg/Tobit), explores censoring threshold sensitivity, compares to a beta-binomial alternative, and runs robustness checks.
 
 ## Data and sources
-- `S1_file_combined.xlsx` - primary analysis dataset (site-period level).
-- `s41562-023-01700-y.pdf` - paper PDF.
-- `0redo_viol230707nhb.do` - original Stata replication script from the authors.
+- Zenodo record (includes `S1_file_combined.xlsx` and `0redo_viol230707nhb.do`): https://zenodo.org/records/8010025
 
 ## Project map
 - `Model_1.R` - Model 1 replication in R (custom MLE for Stata intreg-style Tobit).
@@ -76,5 +74,6 @@ source("Model_1.R")
 - `Binomial_NEW.html` and `Binomial_NEW.pdf` - model comparison report.
 
 ## Notes
-- Scripts rely on `S1_file_combined.xlsx` in the project root.
+- Scripts read `S1_file_combined.xlsx` from Zenodo via a temporary file, so nothing is written to the repo:
+  https://zenodo.org/records/8010025/files/S1_file_combined.xlsx?download=1
 - The Stata-intreg replication uses left-censoring at a log scale threshold (baseline `c = -3`) and analytic weights normalized to sum to N, matching the paper's implementation.

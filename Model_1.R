@@ -3,7 +3,11 @@ library(readxl)
 library(dplyr)
 
 # --- Load data ---
-df_raw <- read_excel("S1_file_combined.xlsx")
+data_url <- "https://zenodo.org/records/8010025/files/S1_file_combined.xlsx?download=1"
+tmp_file <- tempfile(fileext = ".xlsx")
+download.file(data_url, destfile = tmp_file, mode = "wb", quiet = TRUE)
+df_raw <- read_excel(tmp_file)
+unlink(tmp_file)
 
 # --- Build ONE analysis dataset (all objects derive from this) ---
 dat <- df_raw %>%
@@ -131,8 +135,6 @@ out_stata
 
 # Optional: report sigma too
 c(sigma = sigma_hat, lnsigma = lnsigma_hat)
-
-
 
 
 

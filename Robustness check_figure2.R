@@ -1,7 +1,11 @@
 library(readxl)
 library(tidyverse)
 
-viol_data <- read_excel("S1_file_combined.xlsx")
+data_url <- "https://zenodo.org/records/8010025/files/S1_file_combined.xlsx?download=1"
+tmp_file <- tempfile(fileext = ".xlsx")
+download.file(data_url, destfile = tmp_file, mode = "wb", quiet = TRUE)
+viol_data <- read_excel(tmp_file)
+unlink(tmp_file)
 
 # Explanation: For Figure 2, the authors excluded all cases with less than 30 observations except for Late Bronze Turkey (n = 9). 
 # In the supplementary materials, they justify keeping Turkey-LBA because it aligns with interregional trends of increasing violence during Late Bronze Age,

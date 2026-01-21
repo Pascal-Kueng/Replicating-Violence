@@ -1,7 +1,11 @@
 library(readxl)
 library(dplyr)
 
-viol_data <- read_excel("S1_file_combined.xlsx")
+data_url <- "https://zenodo.org/records/8010025/files/S1_file_combined.xlsx?download=1"
+tmp_file <- tempfile(fileext = ".xlsx")
+download.file(data_url, destfile = tmp_file, mode = "wb", quiet = TRUE)
+viol_data <- read_excel(tmp_file)
+unlink(tmp_file)
 
 # Explanation: Some of the rows in the data set are not merged despite all variables except for ratio/percentage one's being equal
 # To test for robustness, we ran model 3 on the original and merged data set and compared results
