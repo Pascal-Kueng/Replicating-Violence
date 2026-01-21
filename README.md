@@ -28,47 +28,47 @@ This repo reproduces the paper's Model 3 (Stata intreg/Tobit), explores censorin
 
 ## Environment setup (renv)
 1) Install R 4.5.2 (see `renv.lock`).
-2) Restore packages:
-```bash
-R -e "renv::restore()"
+2) Restore packages in R:
+```r
+renv::restore()
 ```
-This pulls packages from the Posit CRAN mirror in `renv.lock`.
+This pulls packages from the Posit CRAN mirror in `renv.lock`. All commands below are meant to be run directly in R (RStudio or console), from the project root.
 
 ## Reproduce the analysis
 Run scripts from the repo root. Most scripts print results to the console and open plots in the active graphics device.
 
-### Model 3 replication (Stata intreg-style)
-```bash
-Rscript Model_3.R
+### Model 3 computational replication (Stata intreg-style)
+```r
+source("Model_3.R")
 ```
 
 ### Censoring threshold sensitivity (Model 3)
-```bash
-Rscript Model_3_Sensitivity_Threshold.R
+```r
+source("Model_3_Sensitivity_Threshold.R")
 ```
 This script sources `Model_3.R` internally and produces fit tables and the coefficient sensitivity plot.
 
 ### Tobit vs beta-binomial comparison
-```bash
-R -e "rmarkdown::render('Binomial_NEW.Rmd')"
+```r
+rmarkdown::render("Binomial_NEW.Rmd")
 ```
 Rendering to PDF requires a LaTeX installation.
 
 ### Full report (Quarto)
-```bash
-quarto render Report_Sensitivity.qmd
+```r
+quarto::quarto_render("Report_Sensitivity.qmd")
 ```
 
 ### Robustness checks
-```bash
-Rscript "Robustness check_figure2.R"
-Rscript "Robustness check_merged data.R"
+```r
+source("Robustness check_figure2.R")
+source("Robustness check_merged data.R")
 ```
 
 ### Model 1 replication (optional)
-```bash
-R -e "rmarkdown::render('01_Computational_Replication.Rmd')"
-Rscript Model_1.R
+```r
+rmarkdown::render("01_Computational_Replication.Rmd")
+source("Model_1.R")
 ```
 
 ## Outputs
