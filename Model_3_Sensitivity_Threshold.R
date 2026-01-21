@@ -4,7 +4,7 @@
 # (ONLY cpoint changes; everything else identical)
 # ============================================================
 
-source(Model_3.R)
+source("Model_3.R")
 
 run_full_pipeline_for_cpoint <- function(cpoint, start_par = NULL, seed_rq = 1) {
   
@@ -270,6 +270,7 @@ print(fit_grid)
 format_est_sig <- function(model_res) {
   # Extract Estimate (Column 1) and P-value (Column 4) by index to be safe
   est  <- model_res$out[, 1]  
+  se   <- model_res$out[, 2]
   pval <- model_res$out[, 4]  
   
   # Define stars
