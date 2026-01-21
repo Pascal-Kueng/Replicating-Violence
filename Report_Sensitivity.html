@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Report Sensitivity Model 3</title>
+<title>Replicating Violence</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -2311,7 +2311,8 @@ window.Quarto = {
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Report Sensitivity Model 3</h1>
+<h1 class="title">Replicating Violence</h1>
+<p class="subtitle lead">Replication and Sensitivity Analysis of Model 3</p>
 </div>
 
 
@@ -2328,6 +2329,8 @@ window.Quarto = {
 </header>
 
 
+<p>This report replicates and tests the roboustness of the main model (Model 3) from the paper:</p>
+<p>Baten, J., Benati, G., &amp; Sołtysiak, A. (2023). Violence trends in the ancient Middle East between 12,000 and 400 BCE. <em>Nature Human Behaviour</em>, <em>7</em>(12), 2064–2073. <a href="https://doi.org/10.1038/s41562-023-01700-y">https://doi.org/10.1038/s41562-023-01700-y</a></p>
 <section id="discrepancies-between-the-reported-and-implemented-analysis" class="level4">
 <h4 class="anchored" data-anchor-id="discrepancies-between-the-reported-and-implemented-analysis">1. Discrepancies between the reported and implemented analysis</h4>
 <p>The paper states that the dependent variable is log-transformed after adding a small constant (0.05) to accommodate zero trauma shares. In the original estimation code we examined, we do not find a ‘+0.05’ transformation step. Accordingly, reproducing the published results does not require (and is not consistent with) a <span class="math inline">\(\log(y + 0.05)\)</span> specification.</p>

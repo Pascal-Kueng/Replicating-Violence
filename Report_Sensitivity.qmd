@@ -1,9 +1,14 @@
 ---
-title: "Report Sensitivity Model 3"
+title: "Replicating Violence"
+subtitle: "Replication and Sensitivity Analysis of Model 3"
 format:
   html:
     embed-resources: true
 ---
+
+This report replicates and tests the roboustness of the main model (Model 3) from the paper:
+
+Baten, J., Benati, G., & Sołtysiak, A. (2023). Violence trends in the ancient Middle East between 12,000 and 400 BCE. *Nature Human Behaviour*, *7*(12), 2064–2073. [https://doi.org/10.1038/s41562-023-01700-y](https://doi.org/10.1038/s41562-023-01700-y)
 
 
 #### 1. Discrepancies between the reported and implemented analysis
