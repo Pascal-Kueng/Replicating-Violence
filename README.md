@@ -9,21 +9,6 @@ This repo reproduces the paper's Model 3 (Stata intreg/Tobit), explores censorin
 ## Data and sources
 - Zenodo record (includes `S1_file_combined.xlsx` and `0redo_viol230707nhb.do`): https://zenodo.org/records/8010025
 
-## Project map
-- `Model_1.R` - Model 1 replication in R (custom MLE for Stata intreg-style Tobit).
-- `01_Computational_Replication.Rmd` - Model 1 replication with `survreg` and clustered SEs.
-- `Model_3.R` - Model 3 replication (custom MLE, analytic weights, cluster-robust SEs) plus diagnostics and plots.
-- `Model_3_Sensitivity_Threshold.R` - re-runs Model 3 across censoring points and summarizes fit and coefficient sensitivity.
-- `Binomial_NEW.Rmd` - Tobit vs beta-binomial comparison with diagnostics and common-scale predictive checks.
-- `Binomial.R` - older all-in-one script kept for reference.
-- `Robustness check_figure2.R` - reproduces Figure 2 under alternative exclusion rules.
-- `Robustness check_merged data.R` - merges duplicate rows and compares Model 3 estimates.
-- `Report_Sensitivity.qmd` - main narrative report that sources Model 3 and sensitivity analyses.
-- `Report_Sensitivity.html` - rendered report output.
-- `Binomial_NEW.html` and `Binomial_NEW.pdf` - rendered outputs for the binomial comparison.
-- `renv/` and `renv.lock` - reproducible R environment.
-- `Replicating-Violence.Rproj` - RStudio project file.
-
 ## Environment setup (renv)
 1) Install R 4.5.2 (see `renv.lock`).
 2) Restore packages in R:
@@ -48,14 +33,19 @@ This script sources `Model_3.R` internally and produces fit tables and the coeff
 
 ### Tobit vs beta-binomial comparison
 ```r
-rmarkdown::render("Binomial_NEW.Rmd")
+rmarkdown::render("Binomial_NEW.Rmd", output_format = "html_document")
 ```
-Rendering to PDF requires a LaTeX installation.
+To render the PDF instead, use:
+```r
+rmarkdown::render("Binomial_NEW.Rmd", output_format = "pdf_document")
+```
+PDF rendering requires a LaTeX installation.
 
 ### Full report (Quarto)
 ```r
 quarto::quarto_render("Report_Sensitivity.qmd")
 ```
+This renders to HTML by default and covers the Model 3 replication plus the censoring threshold sensitivity. It does not include the robustness checks or the beta-binomial comparison.
 
 ### Robustness checks
 ```r
@@ -72,8 +62,27 @@ source("Model_1.R")
 ## Outputs
 - `Report_Sensitivity.html` - main replication and sensitivity report.
 - `Binomial_NEW.html` and `Binomial_NEW.pdf` - model comparison report.
+HTML files can be downloaded and opened directly in a web browser.
 
 ## Notes
 - Scripts read `S1_file_combined.xlsx` from Zenodo via a temporary file, so nothing is written to the repo:
   https://zenodo.org/records/8010025/files/S1_file_combined.xlsx?download=1
+- Internet access is required to fetch the dataset at runtime.
+- Rendering `Report_Sensitivity.qmd` requires Quarto.
+- Rendering `Binomial_NEW.pdf` requires a LaTeX installation.
 - The Stata-intreg replication uses left-censoring at a log scale threshold (baseline `c = -3`) and analytic weights normalized to sum to N, matching the paper's implementation.
+
+## Project map
+- `Model_1.R` - Model 1 replication in R (custom MLE for Stata intreg-style Tobit).
+- `01_Computational_Replication.Rmd` - Model 1 replication with `survreg` and clustered SEs.
+- `Model_3.R` - Model 3 replication (custom MLE, analytic weights, cluster-robust SEs) plus diagnostics and plots.
+- `Model_3_Sensitivity_Threshold.R` - re-runs Model 3 across censoring points and summarizes fit and coefficient sensitivity.
+- `Binomial_NEW.Rmd` - Tobit vs beta-binomial comparison with diagnostics and common-scale predictive checks.
+- `Binomial.R` - older all-in-one script kept for reference.
+- `Robustness check_figure2.R` - reproduces Figure 2 under alternative exclusion rules.
+- `Robustness check_merged data.R` - merges duplicate rows and compares Model 3 estimates.
+- `Report_Sensitivity.qmd` - main narrative report that sources Model 3 and sensitivity analyses.
+- `Report_Sensitivity.html` - rendered report output.
+- `Binomial_NEW.html` and `Binomial_NEW.pdf` - rendered outputs for the binomial comparison.
+- `renv/` and `renv.lock` - reproducible R environment.
+- `Replicating-Violence.Rproj` - RStudio project file.
