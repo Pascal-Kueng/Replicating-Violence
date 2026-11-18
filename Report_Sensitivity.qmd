@@ -6,7 +6,7 @@ format:
     embed-resources: true
 ---
 
-This report replicates and tests the roboustness of the main model (Model 3) from the paper:
+This report replicates and tests the robustness of the main model (Model 3) from the paper:
 
 Baten, J., Benati, G., & Sołtysiak, A. (2023). Violence trends in the ancient Middle East between 12,000 and 400 BCE. *Nature Human Behaviour*, *7*(12), 2064–2073. [https://doi.org/10.1038/s41562-023-01700-y](https://doi.org/10.1038/s41562-023-01700-y)
 
@@ -15,7 +15,7 @@ Baten, J., Benati, G., & Sołtysiak, A. (2023). Violence trends in the ancient M
 
 The paper states that the dependent variable is log-transformed after adding a small constant (0.05) to accommodate zero trauma shares. In the original estimation code we examined, we do not find a ‘+0.05’ transformation step. Accordingly, reproducing the published results does not require (and is not consistent with) a $\log(y + 0.05)$ specification. 
 
-Instead, the published estimates are exactly reproduced when the outcome is constructed as follows: the log is taken only for strictly positive trauma shares, and observations with a trauma share of zero are not transformed into a finite log value but are treated as left-censored at a fixed censoring point on the log scale (approximately −3). This is a substantively different procedure from adding a constant before logging. Under the implemented approach, zeros contribute to the likelihood through a censoring assumption (“latent below the threshold”) rather than through an observed transformed value. Because this censoring step is central to the model’s interpretation and to how zeros are handled, the mismatch between the paper’s description and the implemented code is consequential.
+Instead, the published estimates are exactly reproduced when the outcome is constructed as follows: the log is taken only for strictly positive trauma shares, and observations with a trauma share of zero are not transformed into a finite log value but are treated as left-censored at a fixed censoring point on the log scale (−3). This is a substantively different procedure from adding a constant before logging. Under the implemented approach, zeros contribute to the likelihood through a censoring assumption (“latent below the threshold”) rather than through an observed transformed value. Because this censoring step is central to the model’s interpretation and to how zeros are handled, the mismatch between the paper’s description and the implemented code is consequential.
 
 #### 2. Why the censored Tobit/intreg approach is conceptually misaligned with the data
 
@@ -60,7 +60,7 @@ source("Model_3_Sensitivity_Threshold.R")
 print(p)
 ```
 
-**Fit vs. calibration trade-off.** Within the Tobit likelihood, fit improves mechanically as $c$ increases (logLik rises and AIC/BIC fall). However, this improvement coincides with sharply worsening calibration of zeros: while the observed weighted censoring rate is **0.125**, the model’s predicted weighted censoring probability rises from **0.126** at $c = -5.0$ to **0.600** at $c = -3.0$ and **0.711** at $c = -2.5$. Thus, the censor points that appear “best” by AIC/BIC correspond to the most implausible predicted frequency of zeros and exacerbate the model’s misalignment with the bounded outcome.
+**Fit vs. calibration trade-off.** Within the Tobit likelihood, fit improves mechanically as $c$ increases (logLik rises and AIC/BIC fall). However, while the observed weighted censoring rate is **0.125**, the model’s predicted weighted censoring probability rises from **0.126** at $c = -5.0$ to **0.600** at $c = -3.0$ and **0.711** at $c = -2.5$. This gap arises mainly because observed positive shares fall below the censoring point whenever $c$ is above $-4.28$ (the log of the smallest positive share, 0.014). At $c = -3.0$, nine site-periods with positive shares between 1.4% and 4.3% lie below the censoring point. Together with the zeros, they make up 55.2% of the weighted sample (`obs_below_w` in Table 1). A Tobit model assumes that no observed value lies below the censoring point, so the specification used in the paper conflicts with the data. Only $c = -5.0$ and $-4.5$ avoid this conflict, and under both, `Early_Bronze_Age` is not statistically significant.
 
 **Table 1: Model Fit versus Calibration.**
 ```{r results='asis'}
@@ -71,13 +71,12 @@ print(p)
 
 # Select key columns for display (AIC, BIC, and Calibration)
 # Assumes 'fit_grid' exists from the sourced script
-cols_to_show <- c("cpoint", "logLik", "AIC", "BIC", "obs_cens_w", "pred_cens_w")
-cat("**Table 1: Model Fit versus Calibration.**")
+cols_to_show <- c("cpoint", "logLik", "AIC", "BIC", "obs_cens_w", "obs_below_w", "pred_cens_w")
 knitr::kable(fit_grid[, cols_to_show], 
              digits = 3,
              format = "markdown")
 ```
-*Note: Each row reports the Tobit/intreg-style model re-estimated with an alternative censoring point (c) (log scale), holding covariates, analytic weights, clustering, and estimation identical. (`obs_cens_w`) is the observed weighted share of left-censored observations (zeros), and (`pred_cens_w`) is the model-implied weighted probability of censoring averaged over observations.*
+*Note: Each row reports the Tobit/intreg-style model re-estimated with an alternative censoring point (c) (log scale), holding covariates, analytic weights, clustering, and estimation identical. (`obs_cens_w`) is the observed weighted share of left-censored observations (zeros), and (`pred_cens_w`) is the model-implied weighted probability of censoring averaged over observations. (`obs_below_w`) is the observed weighted share of observations at or below the censoring point, that is, zeros plus positive shares below exp(c).*
 
 **Implication.** The Tobit results—and in particular which period and proxy effects appear statistically supported—are sensitive to an analyst-chosen censoring threshold. This sensitivity reinforces that the Tobit/censoring formulation is not a robust basis for inference in a “count-out-of-$n$” setting.
 
@@ -88,8 +87,8 @@ The analysis sample consists of $N=82$ site-period observations (34 zero-trauma 
 While the Tobit model technically reports a lower AIC ($234.7$ vs $329.5$), these metrics are **not comparable** because the models operate on different outcome scales (continuous log-density vs. discrete counts). Instead, we rely on "common-scale" predictive checks, which reveal severe miscalibration in the Tobit specification:
 
 * **Predictive Validity (The "Exploding Mean" Failure):** The Tobit model generates predictions outside the possible range [0,1] when projected back to the original scale. Because the latent normal is unbounded, $\exp(y^\ast)$ can be arbitrarily large; with heteroskedasticity from weights this yields extreme means. This is a property of exponentiating an unbounded normal index (lognormal moments), not a feature of the bounded data. The weighted predicted mean trauma share for the Tobit model was **2,330.16**, compared to an observed weighted mean of **0.091**. This failure is systematic across periods: for example, the Tobit model predicts weighted means of **5,677** for period `Early_Bronze_Age` and **7,896** for `Middle_Bronze_Age`, against observed means of $< 0.10$. This occurs because the Tobit model applies analytic weights to the *log-scale* variance; when back-transformed to the natural scale, this inflated variance creates a heavy right tail that does not exist in the bounded $[0,1]$ data.
-* **Zero-Inflation/Censoring:** The Tobit model fundamentally misidentifies the frequency of zeros. It predicts a weighted zero rate of **59.9%**, whereas the observed weighted zero rate is only **12.6%**. The beta-binomial model successfully recovers the data structure with a predicted zero rate of **16.4%**.
-* **Residual Diagnostics:** The beta-binomial model does not show evidence of misspecification. DHARMa simulation-based diagnostics confirm the residuals conform to expected distributions (KS test $p=0.59$) and that dispersion is correctly modeled ($p=0.36$), with no significant zero-inflation ($p=0.58$).
+* **Zero-Inflation/Censoring:** The Tobit model fundamentally misidentifies the frequency of zeros. It predicts a weighted zero rate of **59.9%**, whereas the observed weighted zero rate is only **12.6%**. This is mainly because the model counts every latent value below the censoring point as a zero, while nine observed positive shares lie below it (see Section 4.1). The beta-binomial model successfully recovers the data structure with a predicted zero rate of **16.4%**.
+* **Residual Diagnostics:** The beta-binomial model does not show evidence of misspecification. DHARMa simulation-based diagnostics confirm the residuals conform to expected distributions (KS test $p=0.60$) and that dispersion is correctly modeled ($p=0.37$), with no significant zero-inflation ($p=0.58$).
 
 
 ### 5. Re-evaluating the Paper’s Conclusions
@@ -116,7 +115,7 @@ The choice of model alters the statistical significance of the findings, though 
 * **Period Middle_Bronze_Age:** Both models identify the `Middle_Bronze_Age` period as having significantly lower trauma than the baseline.
 
 **B. Conclusions Not Supported:**
-The Tobit model identified three other periods (`Neolithic`, `Early_Bronze_Age`, `Iron_Age`) as having significantly lower trauma rates. **The beta-binomial model finds no evidence for this**, suggesting these effects could be artifacts of treating small-sample zeros as high-certainty data points.
+The Tobit model identified three other periods (`Neolithic`, `Early_Bronze_Age`, `Iron_Age`) as having significantly lower trauma rates. **The beta-binomial model finds no statistically significant evidence for this**, suggesting these effects could partly reflect the Tobit specification, which treats 0/5 and 0/500 as the same censored value.
 
 **C. New Insights:**
 * **Geographic controls are model-dependent:**
@@ -128,7 +127,7 @@ Comparing the beta-binomial results to the Tobit threshold sensitivity analysis 
 1.  **Tobit-sensitive terms also differ most across model classes (`Early_Bronze_Age`, `Regionl`):** These covariates show noticeable changes in support across plausible Tobit censoring points, and they also change when moving from the Tobit (paper implementation) to the beta-binomial. This reinforces that inference for these terms is particularly dependent on the Tobit/censoring construction, whereas the beta-binomial avoids reliance on an analyst-chosen censoring threshold by modeling counts-out-of-$n$ directly.
 2.  **Some Tobit-stable period effects are still not robust (`Neolithic`, `Iron_Age`):** Even when `Neolithic` and `Iron_Age` remain significant across Tobit censoring points, they are not supported in the beta-binomial model. This indicates that the difference is not only about the censor threshold, but also about deeper structural features handled by the count model—especially overdispersion and how information scales with sample size ($n$).
 
-**Summary:** The robust evidence supports a simpler story: trauma prevalence is higher in `Battle_Sites` and `Royal_Interments` contexts and lower in `Middle_Bronze_Age`, while additional period differences (`Neolithic`, `Early_Bronze_Age`, `Iron_Age`) are not robust to a count model with overdispersion and appear sensitive to the Tobit/censoring specification.
+**Summary:** The robust evidence supports a simpler story: trauma prevalence is higher in `Battle_Sites` and `Royal_Interments` contexts and lower in `Middle_Bronze_Age`, while additional period differences (`Neolithic`, `Early_Bronze_Age`, `Iron_Age`) are not robust to a count model with overdispersion. Of these, only `Early_Bronze_Age` is also sensitive to the Tobit censoring point.
 
 
 

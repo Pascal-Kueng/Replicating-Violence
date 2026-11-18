@@ -60,6 +60,7 @@ source("Model_1.R")
 ```
 
 ## Outputs
+- `Replication Report.pdf` - our replication report. This version corrects the standard errors in the censoring-point columns of Table 2, which were wrong in the first version posted on OSF (https://osf.io/kvy27/).
 - `Report_Sensitivity.html` - main replication and sensitivity report.
 - `Binomial_NEW.html` and `Binomial_NEW.pdf` - model comparison report.
 HTML files can be downloaded and opened directly in a web browser.

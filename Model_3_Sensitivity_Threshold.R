@@ -94,6 +94,8 @@ run_full_pipeline_for_cpoint <- function(cpoint, start_par = NULL, seed_rq = 1) 
   obs_cens_unw  <- mean(is_cens)
   pred_cens_unw <- mean(p_cens_hat)
   obs_cens_w    <- weighted.mean(is_cens, w = a)
+  # zeros plus positive shares below exp(cpoint): the observed counterpart of pred_cens_w
+  obs_below_w   <- weighted.mean(dat$tr_nop <= exp(cpoint), w = a)
   pred_cens_w   <- weighted.mean(p_cens_hat, w = a)
   
   brier_w <- weighted.mean((as.numeric(is_cens) - p_cens_hat)^2, w = a)
@@ -213,6 +215,7 @@ run_full_pipeline_for_cpoint <- function(cpoint, start_par = NULL, seed_rq = 1) 
     obs_cens_unw = obs_cens_unw,
     pred_cens_unw = pred_cens_unw,
     obs_cens_w = obs_cens_w,
+    obs_below_w = obs_below_w,
     pred_cens_w = pred_cens_w,
     brier_w = brier_w,
     rmse_uncensored = rmse_u,
@@ -313,7 +316,7 @@ print(kable(coef_grid_sig,
 # 2. Fit Statistics Table
 #    (Selecting key columns to avoid width issues, and rounding numbers)
 key_cols <- c("cpoint", "logLik", "AIC", "BIC", "rmse_uncensored", 
-              "pseudoR2_mcfadden", "obs_cens_w", "pred_cens_w")
+              "pseudoR2_mcfadden", "obs_cens_w", "obs_below_w", "pred_cens_w")
 
 print(kable(fit_grid[, key_cols], 
             digits = 3, 

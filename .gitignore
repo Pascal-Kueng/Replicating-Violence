@@ -51,3 +51,6 @@ rsconnect/
 # Data to be safe
 *.xlsx
 *.xls
+
+# Drafts from the NHB meta-analysis (shared with co-authors only, not for this public repo)
+nhb_meta/
